@@ -308,6 +308,12 @@
    JARVIS v3 — neural uplink.
    HUD unchanged; canned brain replaced by secure backend uplink.
    ===================================================================== */
+/* ================= ARMOUR TRIGGER PHRASES — ONE-EDIT SWAP =================
+   Add the user's secret phrase to ARMOUR_ON_PHRASES when he gives it.
+   Plain text, case-insensitive substring match — no regex escaping needed. */
+const ARMOUR_ON_PHRASES = ["armour up", "suit up", "full power"];
+const ARMOUR_OFF_PHRASES = ["stand down", "armour off", "power down", "normal mode"];
+/* =============== end armour trigger phrases =============== */
 const logBox = document.getElementById('log');
 const micBtn = document.getElementById('mic');
 const micWrap = document.getElementById('micwrap');
@@ -437,8 +443,7 @@ async function askBrain(raw) {
 
 /* ---------- ARMOUR MODE ---------- */
 let armourMode = false; // session state; sent with every /api/chat call
-const ARMOUR_ON_RE = /(armour up|armor up|get armour|get armor|suit up|full power)/i;
-const ARMOUR_OFF_RE = /(stand down|armour off|armor off|power down|normal mode)/i;
+function matchesAny(t, phrases) { return phrases.some(p => t.includes(p)); }
 function setArmour(on) {
   armourMode = on;
   document.body.classList.toggle('armour-on', on);
@@ -448,12 +453,14 @@ function setArmour(on) {
 function handleCommand(raw) {
   const t = raw.toLowerCase().trim();
   addLog('you', raw);
-  if (ARMOUR_ON_RE.test(t) && !ARMOUR_OFF_RE.test(t)) {
+  const hitOn = matchesAny(t, ARMOUR_ON_PHRASES);
+  const hitOff = matchesAny(t, ARMOUR_OFF_PHRASES);
+  if (hitOn && !hitOff) {
     if (!armourMode) { setArmour(true); speak('Armour online, sir. Full potential engaged.'); }
     else speak('Armour is already online, sir.');
     return;
   }
-  if (ARMOUR_OFF_RE.test(t)) {
+  if (hitOff) {
     if (armourMode) { setArmour(false); speak('Armour disengaged, sir.'); }
     else speak('Armour is already offline, sir.');
     return;
