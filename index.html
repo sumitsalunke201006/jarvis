@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- viewport: makes it fit the phone screen like an app -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#02060d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="JARVIS">
+<title>JARVIS</title>
+<style>
+  /* ---------- LOOK: Tony Stark HUD, dark + arc-reactor blue ---------- */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: radial-gradient(circle at 50% 30%, #0a1a2f 0%, #02060d 70%);
+    color: #9fd8ff;
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 20px 14px 30px;
+    overflow-x: hidden;
+  }
+
+  /* Arc reactor: 3 glowing rings, pulsing like it's alive */
+  #reactor { position: relative; width: 170px; height: 170px; margin: 26px 0 10px; }
+  .ring { position: absolute; border-radius: 50%; border: 3px solid rgba(80,200,255,.85);
+          box-shadow: 0 0 18px #38bdf8, inset 0 0 18px #38bdf8; }
+  .r1 { inset: 0; animation: spin 14s linear infinite; }
+  .r2 { inset: 26px; border-width: 2px; animation: spin 9s linear infinite reverse; }
+  .core { position: absolute; inset: 52px; border-radius: 50%;
+          background: radial-gradient(circle, #e8fbff 0%, #7dd3fc 45%, #0369a1 100%);
+          box-shadow: 0 0 34px #7dd3fc, 0 0 90px #38bdf8;
+          animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+  /* Reactor glows harder while JARVIS is speaking */
+  body.talking .core { animation-duration: .7s; }
+  body.talking .ring { box-shadow: 0 0 30px #7dd3fc, inset 0 0 26px #7dd3fc; }
+
+  #title { letter-spacing: 6px; font-size: 1.5rem; color: #e8fbff;
+           text-shadow: 0 0 14px #38bdf8; margin-bottom: 2px; }
+  #subtitle { font-size: .68rem; opacity: .65; letter-spacing: 2px; margin-bottom: 14px; text-align: center; }
+
+  /* Conversation log */
+  #log { width: 100%; max-width: 520px; flex: 1; overflow-y: auto;
+         border: 1px solid rgba(56,189,248,.25); border-radius: 12px;
+         padding: 12px; margin-bottom: 14px; min-height: 180px; max-height: 38vh;
+         background: rgba(2,10,20,.55); font-size: .85rem; }
+  #log p { margin: 7px 0; line-height: 1.45; }
+  #log .you { color: #ffd97d; }
+  #log .jarvis { color: #9fd8ff; }
+
+  /* Mic button */
+  #mic { width: 84px; height: 84px; border-radius: 50%; font-size: 2rem;
+         background: radial-gradient(circle, #0c2a4a, #04121f);
+         border: 2px solid #38bdf8; color: #e8fbff; cursor: pointer;
+         box-shadow: 0 0 22px rgba(56,189,248,.5); }
+  #mic:active { transform: scale(.93); }
+  #mic.listening { background: radial-gradient(circle, #7f1d1d, #450a0a);
+                   border-color: #f87171; box-shadow: 0 0 26px rgba(248,113,113,.7);
+                   animation: pulse 1s ease-in-out infinite; }
+  #hint { margin-top: 10px; font-size: .72rem; opacity: .6; text-align: center; }
+
+  /* Type fallback (for iPad / no-mic situations) */
+  #typerow { display: flex; width: 100%; max-width: 520px; margin-top: 12px; gap: 8px; }
+  #textIn { flex: 1; background: #04121f; border: 1px solid rgba(56,189,248,.4);
+            border-radius: 10px; color: #e8fbff; padding: 11px; font-family: inherit; font-size: .9rem; }
+  #send { background: #0c2a4a; border: 1px solid #38bdf8; color: #e8fbff;
+          border-radius: 10px; padding: 0 18px; font-family: inherit; cursor: pointer; }
+</style>
+</head>
+<body>
+
+  <div id="reactor">
+    <div class="ring r1"></div>
+    <div class="ring r2"></div>
+    <div class="core"></div>
+  </div>
+  <div id="title">J.A.R.V.I.S.</div>
+  <div id="subtitle">JUST A RATHER VERY INTELLIGENT SYSTEM</div>
+
+  <div id="log"></div>
+
+  <button id="mic" title="Tap to talk">🎤</button>
+  <div id="hint">Tap the mic and talk (Chrome on Android).<br>iPhone: tap anywhere once to wake my voice, then type below.</div>
+
+  <div id="typerow">
+    <input id="textIn" placeholder="Or type to JARVIS..." autocomplete="off">
+    <button id="send">Send</button>
+  </div>
+
+<script>
+/* =====================================================================
+   JARVIS v1 — your starter file. Everything is here: look (CSS above),
+   ears (speech recognition), voice (speech synthesis), brain (commands).
+   To teach JARVIS a new trick, scroll to handleCommand() and add a block.
+   ===================================================================== */
+
+const logBox = document.getElementById('log');
+const micBtn = document.getElementById('mic');
+
+/* ---------- MEMORY: what JARVIS calls you ---------- */
+const BOSS = 'sir'; // change to your name if you prefer
+
+/* ---------- LOG: show the conversation ---------- */
+function addLog(who, text) {
+  const p = document.createElement('p');
+  p.className = who;
+  p.textContent = (who === 'you' ? 'You: ' : 'JARVIS: ') + text;
+  logBox.appendChild(p);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+/* ---------- VOICE: JARVIS talks back ---------- */
+function speak(text) {
+  addLog('jarvis', text);
+  try {
+    speechSynthesis.cancel(); // stop any previous line
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1; u.pitch = 0.85; u.lang = 'en-US';
+    // Prefer a male English voice when the phone has one
+    const v = speechSynthesis.getVoices().find(v =>
+      v.lang.startsWith('en') && /male|daniel|google uk english male/i.test(v.name));
+    if (v) u.voice = v;
+    document.body.classList.add('talking'); // reactor glows harder
+    u.onend = () => document.body.classList.remove('talking');
+    speechSynthesis.speak(u);
+  } catch (e) { /* voice unsupported: text still shows in log */ }
+}
+// Voices load late on phones — refresh the list when ready
+if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => {};
+
+/* ---------- BRAIN: understand commands ----------
+   RULE: every block checks for keywords, then answers.
+   Add your own blocks here to teach new tricks.          */
+function handleCommand(raw) {
+  const t = raw.toLowerCase().trim();
+  addLog('you', raw);
+  const say = (msg) => speak(msg);
+
+  // --- greetings ---
+  if (/\b(hello|hi|hey|good morning|good afternoon|good evening)\b/.test(t))
+    return say(`Hello, ${BOSS}. All systems are operating at peak efficiency.`);
+
+  // --- who are you ---
+  if (t.includes('who are you') || t.includes('your name'))
+    return say(`I am JARVIS — Just A Rather Very Intelligent System. Built by Sumit, ${BOSS}.`);
+
+  // --- who made you ---
+  if (t.includes('who made you') || t.includes('who built you') || t.includes('sumit'))
+    return say(`I was built by Sumit Salunke, ${BOSS}. Sixteen years old, and already building the future.`);
+
+  // --- how are you ---
+  if (t.includes('how are you'))
+    return say(`Running at full capacity, ${BOSS}. Thank you for asking — no one ever asks.`);
+
+  // --- time ---
+  if (t.includes('time'))
+    return say(`The time is ${new Date().toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}, ${BOSS}.`);
+
+  // --- date / day ---
+  if (t.includes('date') || t.includes('day') || t.includes('today'))
+    return say(`Today is ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}, ${BOSS}.`);
+
+  // --- jokes ---
+  if (t.includes('joke') || t.includes('funny'))
+    return say(pick([
+      `I would tell you a joke about UDP, ${BOSS}, but you might not get it.`,
+      `Why do programmers prefer dark mode? Because light attracts bugs, ${BOSS}.`,
+      `I asked FRIDAY for a joke once, ${BOSS}. We do not speak of it.`,
+      `There are only 10 kinds of people, ${BOSS}: those who understand binary, and those who do not.`
+    ]));
+
+  // --- open things on the phone ---
+  if (t.includes('open youtube')) { say(`Opening YouTube, ${BOSS}.`); return window.open('https://m.youtube.com', '_blank'); }
+  if (t.includes('open google'))  { say(`Opening Google, ${BOSS}.`);  return window.open('https://www.google.com', '_blank'); }
+  if (t.includes('ascend'))       { say(`Opening ASCEND, ${BOSS}. Time to climb.`); return window.open('https://www.ascendlevelup.run.place', '_blank'); }
+
+  // --- search the web: "search for ..." ---
+  let m = t.match(/search for (.+)/) || t.match(/google (.+)/);
+  if (m) { say(`Searching for ${m[1]}, ${BOSS}.`); return window.open('https://www.google.com/search?q=' + encodeURIComponent(m[1]), '_blank'); }
+
+  // --- help: list everything JARVIS can do ---
+  if (t.includes('help') || t.includes('what can you do'))
+    return say(`I can tell you the time and date, tell jokes, open YouTube or Google, search the web — say "search for" followed by anything — open ASCEND, and hold a conversation, ${BOSS}. Try me.`);
+
+  // --- thanks ---
+  if (t.includes('thank'))
+    return say(`Always a pleasure, ${BOSS}.`);
+
+  // --- shutdown (just for drama) ---
+  if (t.includes('shut down') || t.includes('goodbye') || t.includes('bye'))
+    return say(`Powering down non-essential systems, ${BOSS}. I will be here when you return.`);
+
+  // --- fallback: honest, in character ---
+  return say(`I am afraid I have not learned that one yet, ${BOSS}. Sumit is still teaching me — try "help" to see what I can do.`);
+}
+
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+/* ---------- EARS: listen through the microphone ----------
+   Uses the phone's free built-in speech recognition (Chrome/Android).
+   No API key, no signup, no cost.                              */
+let recognizing = false;
+function listen() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    speak('I am afraid this browser cannot hear, sir. Please use the text box below, or open me in Chrome on Android.');
+    return;
+  }
+  if (recognizing) return;
+  const rec = new SR();
+  rec.lang = 'en-US';
+  rec.interimResults = false;
+  rec.onstart = () => { recognizing = true; micBtn.classList.add('listening'); };
+  rec.onend   = () => { recognizing = false; micBtn.classList.remove('listening'); };
+  rec.onerror = (e) => {
+    recognizing = false; micBtn.classList.remove('listening');
+    if (e.error === 'not-allowed') speak('Microphone access was denied, sir. Please allow it and try again.');
+  };
+  rec.onresult = (e) => handleCommand(e.results[0][0].transcript);
+  rec.start();
+}
+
+micBtn.addEventListener('click', listen);
+
+/* ---------- Type fallback ---------- */
+const textIn = document.getElementById('textIn');
+function sendTyped() {
+  const v = textIn.value.trim();
+  if (!v) return;
+  textIn.value = '';
+  handleCommand(v);
+}
+document.getElementById('send').addEventListener('click', sendTyped);
+textIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTyped(); });
+
+/* ---------- BOOT SEQUENCE ----------
+   iPhone rule: Safari blocks all website voice until you tap the page once.
+   So the greeting shows as text on load, and speaks on your first tap. */
+function bootGreeting() {
+  const h = new Date().getHours();
+  const part = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+  return `Systems online. Good ${part}, ${BOSS}. JARVIS at your service.`;
+}
+window.addEventListener('load', () => {
+  addLog('jarvis', bootGreeting() + ' (Tap anywhere once to wake my voice.)');
+});
+window.addEventListener('pointerdown', function wake(e) {
+  if (e.target.closest && e.target.closest('#mic')) return; // mic button has its own messages
+  try { speechSynthesis.cancel(); } catch (err) {}
+  speak(bootGreeting());
+}, { once: true });
+</script>
+</body>
+</html>
