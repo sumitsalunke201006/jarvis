@@ -187,7 +187,7 @@ function stamp() { return new Date().toLocaleTimeString('en-IN', { hour: '2-digi
 
 /* ---------- STATUS + LOG → 3D panels (guards: safe before scene init) ---------- */
 let currentStatus = 'STANDBY';
-let quota = { remaining: null, resetSec: 0 }; // neural-core allowance, refreshed from response headers
+let quota = { remaining: null, limit: 60, resetSec: 0 }; // neural-core allowance, refreshed from response headers
 function setStatus(s) { currentStatus = s; drawStatus(); }
 const logEntries = []; // {who, text, ts} — rendered onto the 3D comms panel
 function addLog(who, text) {
@@ -304,6 +304,7 @@ async function askBrain(raw) {
     const qRem = res.headers.get('X-RateLimit-Remaining');
     if (qRem !== null) {
       quota.remaining = parseInt(qRem, 10);
+      quota.limit = parseInt(res.headers.get('X-RateLimit-Limit') || '60', 10) || 60;
       quota.resetSec = parseInt(res.headers.get('X-RateLimit-Reset') || '0', 10) || 0;
       drawStatus();
     }
@@ -355,7 +356,7 @@ function handleCommand(raw) {
     if (quota.remaining === null) { speak('I have not consulted the neural core yet, sir. Ask me something first.'); }
     else {
       const mins = Math.max(1, Math.round(quota.resetSec / 60));
-      speak('You have ' + quota.remaining + ' of 30 requests remaining, sir. A fresh allowance in about ' + mins + ' minutes.');
+      speak('You have ' + quota.remaining + ' of ' + quota.limit + ' requests remaining, sir. A fresh allowance in about ' + mins + ' minutes.');
     }
     return;
   }
@@ -675,7 +676,7 @@ function drawStatus() {
       ctx.font = '600 20px Orbitron, monospace';
       ctx.fillStyle = '#9fd8ff';
       ctx.textAlign = 'center';
-      ctx.fillText('UPLINK ' + quota.remaining + '/30', w/2, 142);
+      ctx.fillText('UPLINK ' + quota.remaining + '/' + quota.limit, w/2, 142);
     }
     ctx.textAlign = 'left';
   });
