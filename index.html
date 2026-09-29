@@ -187,6 +187,7 @@ function stamp() { return new Date().toLocaleTimeString('en-IN', { hour: '2-digi
 
 /* ---------- STATUS + LOG → 3D panels (guards: safe before scene init) ---------- */
 let currentStatus = 'STANDBY';
+let quota = { remaining: null, resetSec: 0 }; // neural-core allowance, refreshed from response headers
 function setStatus(s) { currentStatus = s; drawStatus(); }
 const logEntries = []; // {who, text, ts} — rendered onto the 3D comms panel
 function addLog(who, text) {
@@ -300,6 +301,12 @@ async function askBrain(raw) {
       body: JSON.stringify({ message: raw, history: convoHistory.slice(-20), armour: armourMode })
     });
     clearTimeout(to);
+    const qRem = res.headers.get('X-RateLimit-Remaining');
+    if (qRem !== null) {
+      quota.remaining = parseInt(qRem, 10);
+      quota.resetSec = parseInt(res.headers.get('X-RateLimit-Reset') || '0', 10) || 0;
+      drawStatus();
+    }
     const data = await res.json().catch(() => ({}));
     const reply = (data && data.reply ? String(data.reply) : '').trim();
     if (!reply) throw new Error('empty uplink reply');
@@ -342,6 +349,14 @@ function handleCommand(raw) {
   if (hitOff) {
     if (armourMode) { setArmour(false); speak('Armour disengaged, sir.'); }
     else speak('Armour is already offline, sir.');
+    return;
+  }
+  if (/how much time|how many (questions|requests)|my limit|uplink status|quota|time do i have|requests (left|remaining)/.test(t)) {
+    if (quota.remaining === null) { speak('I have not consulted the neural core yet, sir. Ask me something first.'); }
+    else {
+      const mins = Math.max(1, Math.round(quota.resetSec / 60));
+      speak('You have ' + quota.remaining + ' of 30 requests remaining, sir. A fresh allowance in about ' + mins + ' minutes.');
+    }
     return;
   }
   if (t.includes('open youtube')) { speak('Opening YouTube, sir.'); return window.open('https://m.youtube.com', '_blank'); }
@@ -620,6 +635,12 @@ function drawStatus() {
     ctx.font = '700 30px Orbitron, monospace'; ctx.textAlign = 'center';
     const lines = wrap(ctx, currentStatus, w - 60);
     ctx.fillText(lines[0] || '', w/2, 100);
+    if (quota.remaining !== null && Number.isFinite(quota.remaining)) {
+      ctx.font = '600 20px Orbitron, monospace';
+      ctx.fillStyle = '#9fd8ff';
+      ctx.textAlign = 'center';
+      ctx.fillText('UPLINK ' + quota.remaining + '/30', w/2, 142);
+    }
     ctx.textAlign = 'left';
   });
 }
