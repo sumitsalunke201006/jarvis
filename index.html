@@ -2,169 +2,254 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<!-- viewport: makes it fit the phone screen like an app -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#02060d">
+<meta name="theme-color" content="#010409">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="JARVIS">
 <title>JARVIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
-  /* ---------- LOOK: Tony Stark HUD, dark + arc-reactor blue ---------- */
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --cyan: #46d8ff;
+    --cyan-dim: rgba(70, 216, 255, .28);
+    --amber: #ffc857;
+  }
+  html, body { height: 100%; }
   body {
-    background: radial-gradient(circle at 50% 30%, #0a1a2f 0%, #02060d 70%);
-    color: #9fd8ff;
-    font-family: 'Courier New', monospace;
+    background: #010409;
+    background-image:
+      radial-gradient(ellipse 90% 55% at 50% 32%, rgba(20, 70, 110, .35) 0%, transparent 70%),
+      repeating-linear-gradient(0deg, rgba(70,216,255,.045) 0 1px, transparent 1px 46px),
+      repeating-linear-gradient(90deg, rgba(70,216,255,.045) 0 1px, transparent 1px 46px);
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', monospace;
     min-height: 100vh;
     display: flex; flex-direction: column; align-items: center;
-    padding: 20px 14px 30px;
+    padding: 18px 14px 26px;
     overflow-x: hidden;
+    position: relative;
   }
 
-  /* Arc reactor: 3 glowing rings, pulsing like it's alive */
-  #reactor { position: relative; width: 170px; height: 170px; margin: 26px 0 10px; }
-  .ring { position: absolute; border-radius: 50%; border: 3px solid rgba(80,200,255,.85);
-          box-shadow: 0 0 18px #38bdf8, inset 0 0 18px #38bdf8; }
-  .r1 { inset: 0; animation: spin 14s linear infinite; }
-  .r2 { inset: 26px; border-width: 2px; animation: spin 9s linear infinite reverse; }
-  .core { position: absolute; inset: 52px; border-radius: 50%;
-          background: radial-gradient(circle, #e8fbff 0%, #7dd3fc 45%, #0369a1 100%);
-          box-shadow: 0 0 34px #7dd3fc, 0 0 90px #38bdf8;
-          animation: pulse 2.4s ease-in-out infinite; }
+  /* HUD corner brackets */
+  .corner { position: fixed; width: 26px; height: 26px; border: 2px solid var(--cyan-dim); z-index: 5; pointer-events: none; }
+  .c-tl { top: 10px; left: 10px; border-right: 0; border-bottom: 0; }
+  .c-tr { top: 10px; right: 10px; border-left: 0; border-bottom: 0; }
+  .c-bl { bottom: 10px; left: 10px; border-right: 0; border-top: 0; }
+  .c-br { bottom: 10px; right: 10px; border-left: 0; border-top: 0; }
+
+  /* slow scanline sweep */
+  #scan { position: fixed; left: 0; right: 0; height: 120px; top: -140px; z-index: 4; pointer-events: none;
+    background: linear-gradient(180deg, transparent, rgba(70,216,255,.06), transparent);
+    animation: sweep 7s linear infinite; }
+  @keyframes sweep { to { transform: translateY(130vh); } }
+
+  /* ---------- BOOT OVERLAY ---------- */
+  #boot { position: fixed; inset: 0; background: #010409; z-index: 50;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    transition: opacity .8s ease; padding: 30px; }
+  #boot.done { opacity: 0; pointer-events: none; }
+  #bootlines { font-size: .8rem; line-height: 2; min-height: 200px; width: 100%; max-width: 420px; }
+  #bootlines .ok { color: #7dffb2; }
+
+  /* ---------- HEADER ---------- */
+  header { text-align: center; margin: 10px 0 4px; z-index: 2; }
+  h1 { font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 2rem; letter-spacing: 10px;
+       color: #eaf7ff; text-shadow: 0 0 18px var(--cyan), 0 0 60px rgba(70,216,255,.5); margin-left: 10px; }
+  #sub { font-size: .62rem; letter-spacing: 3px; opacity: .6; margin-top: 6px; }
+  #sysrow { display: flex; gap: 14px; justify-content: center; margin-top: 10px; font-size: .66rem; opacity: .85; }
+  #sysrow .dot { color: #7dffb2; text-shadow: 0 0 8px #7dffb2; }
+
+  /* ---------- ARC REACTOR ---------- */
+  #reactor { position: relative; width: 230px; height: 230px; margin: 14px 0 6px; z-index: 2;
+             animation: reactorIn 1.2s ease-out; }
+  @keyframes reactorIn { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  #reactor svg.ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .spin-a { animation: spin 26s linear infinite; }
+  .spin-b { animation: spin 17s linear infinite reverse; }
+  .spin-c { animation: spin 40s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
-  /* Reactor glows harder while JARVIS is speaking */
-  body.talking .core { animation-duration: .7s; }
-  body.talking .ring { box-shadow: 0 0 30px #7dd3fc, inset 0 0 26px #7dd3fc; }
+  .ring2 { position: absolute; inset: 34px; border-radius: 50%;
+           border: 1px solid var(--cyan-dim); box-shadow: 0 0 14px rgba(70,216,255,.35), inset 0 0 14px rgba(70,216,255,.25); }
+  .core { position: absolute; inset: 74px; border-radius: 50%;
+    background: radial-gradient(circle, #ffffff 0%, #bfeaff 30%, #46d8ff 55%, #0b3b5c 100%);
+    box-shadow: 0 0 30px #46d8ff, 0 0 90px rgba(70,216,255,.8), 0 0 160px rgba(70,216,255,.4);
+    animation: pulse 2.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+  body.talking .core { animation-duration: .6s; }
+  body.talking #reactor { filter: brightness(1.35); }
+  body.listening .core { background: radial-gradient(circle, #fff 0%, #ffe9b8 35%, var(--amber) 60%, #5c3a0b 100%);
+    box-shadow: 0 0 30px var(--amber), 0 0 90px rgba(255,200,87,.8); }
 
-  #title { letter-spacing: 6px; font-size: 1.5rem; color: #e8fbff;
-           text-shadow: 0 0 14px #38bdf8; margin-bottom: 2px; }
-  #subtitle { font-size: .68rem; opacity: .65; letter-spacing: 2px; margin-bottom: 14px; text-align: center; }
+  /* ---------- STATUS + WAVEFORM ---------- */
+  #statusline { font-family: 'Orbitron', sans-serif; font-size: .72rem; letter-spacing: 5px;
+    margin: 6px 0 2px; color: #bfeaff; text-shadow: 0 0 10px var(--cyan); min-height: 1.2em; }
+  #wave { display: flex; align-items: center; gap: 4px; height: 44px; margin: 4px 0 8px; }
+  #wave span { width: 4px; height: 6px; border-radius: 2px; background: var(--cyan-dim); }
+  body.listening #wave span, body.talking #wave span {
+    background: var(--cyan); box-shadow: 0 0 8px var(--cyan);
+    animation: wv .7s ease-in-out infinite alternate; }
+  body.listening #wave span { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  #wave span:nth-child(odd) { animation-delay: .12s; } #wave span:nth-child(3n) { animation-delay: .28s; }
+  #wave span:nth-child(4n) { animation-delay: .4s; } #wave span:nth-child(5n) { animation-delay: .2s; }
+  @keyframes wv { from { height: 6px; } to { height: 40px; } }
 
-  /* Conversation log */
-  #log { width: 100%; max-width: 520px; flex: 1; overflow-y: auto;
-         border: 1px solid rgba(56,189,248,.25); border-radius: 12px;
-         padding: 12px; margin-bottom: 14px; min-height: 180px; max-height: 38vh;
-         background: rgba(2,10,20,.55); font-size: .85rem; }
-  #log p { margin: 7px 0; line-height: 1.45; }
-  #log .you { color: #ffd97d; }
-  #log .jarvis { color: #9fd8ff; }
+  /* ---------- LOG ---------- */
+  #log { width: 100%; max-width: 520px; flex: 1; min-height: 150px; max-height: 30vh; overflow-y: auto;
+    border: 1px solid var(--cyan-dim); border-top: 2px solid var(--cyan-dim);
+    background: rgba(1, 8, 16, .72); padding: 12px 14px; font-size: .82rem;
+    clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+    z-index: 2; }
+  #log p { margin: 8px 0; line-height: 1.5; }
+  #log .ts { opacity: .45; font-size: .68rem; margin-right: 6px; }
+  #log .you { color: var(--amber); }
+  #log .jarvis { color: #bfeaff; }
 
-  /* Mic button */
-  #mic { width: 84px; height: 84px; border-radius: 50%; font-size: 2rem;
-         background: radial-gradient(circle, #0c2a4a, #04121f);
-         border: 2px solid #38bdf8; color: #e8fbff; cursor: pointer;
-         box-shadow: 0 0 22px rgba(56,189,248,.5); }
-  #mic:active { transform: scale(.93); }
-  #mic.listening { background: radial-gradient(circle, #7f1d1d, #450a0a);
-                   border-color: #f87171; box-shadow: 0 0 26px rgba(248,113,113,.7);
-                   animation: pulse 1s ease-in-out infinite; }
-  #hint { margin-top: 10px; font-size: .72rem; opacity: .6; text-align: center; }
+  /* ---------- MIC ---------- */
+  #micwrap { position: relative; margin: 16px 0 4px; z-index: 2; }
+  #mic { width: 88px; height: 88px; border-radius: 50%; font-size: 2.1rem; cursor: pointer;
+    background: radial-gradient(circle at 35% 30%, #103a5c, #04121f 75%);
+    border: 2px solid var(--cyan); color: #eaf7ff;
+    box-shadow: 0 0 24px rgba(70,216,255,.55), inset 0 0 18px rgba(70,216,255,.25); }
+  #mic:active { transform: scale(.92); }
+  #micwrap.listening #mic { border-color: var(--amber); color: #fff;
+    box-shadow: 0 0 30px rgba(255,200,87,.7), inset 0 0 18px rgba(255,200,87,.3); }
+  .ripple { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--amber);
+    opacity: 0; pointer-events: none; }
+  #micwrap.listening .ripple { animation: rip 1.6s ease-out infinite; }
+  #micwrap.listening .ripple.d2 { animation-delay: .8s; }
+  @keyframes rip { 0% { transform: scale(1); opacity: .8; } 100% { transform: scale(1.9); opacity: 0; } }
 
-  /* Type fallback (for iPad / no-mic situations) */
-  #typerow { display: flex; width: 100%; max-width: 520px; margin-top: 12px; gap: 8px; }
-  #textIn { flex: 1; background: #04121f; border: 1px solid rgba(56,189,248,.4);
-            border-radius: 10px; color: #e8fbff; padding: 11px; font-family: inherit; font-size: .9rem; }
-  #send { background: #0c2a4a; border: 1px solid #38bdf8; color: #e8fbff;
-          border-radius: 10px; padding: 0 18px; font-family: inherit; cursor: pointer; }
+  #typerow { display: flex; width: 100%; max-width: 520px; margin-top: 12px; gap: 8px; z-index: 2; }
+  #textIn { flex: 1; background: rgba(1,8,16,.8); border: 1px solid var(--cyan-dim);
+    color: #eaf7ff; padding: 12px; font-family: inherit; font-size: .88rem; outline: none;
+    clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px); }
+  #textIn:focus { border-color: var(--cyan); }
+  #send { background: rgba(16,58,92,.6); border: 1px solid var(--cyan); color: #eaf7ff;
+    padding: 0 20px; font-family: 'Orbitron', sans-serif; font-size: .7rem; letter-spacing: 2px; cursor: pointer; }
+  #send:active { transform: scale(.95); }
 </style>
 </head>
 <body>
 
-  <div id="reactor">
-    <div class="ring r1"></div>
-    <div class="ring r2"></div>
-    <div class="core"></div>
+<div class="corner c-tl"></div><div class="corner c-tr"></div>
+<div class="corner c-bl"></div><div class="corner c-br"></div>
+<div id="scan"></div>
+
+<!-- BOOT SEQUENCE -->
+<div id="boot"><div id="bootlines"></div></div>
+
+<header>
+  <h1>JARVIS</h1>
+  <div id="sub">JUST A RATHER VERY INTELLIGENT SYSTEM</div>
+  <div id="sysrow">
+    <span><span class="dot">●</span> SYSTEMS NOMINAL</span>
+    <span id="clock">--:--</span>
   </div>
-  <div id="title">J.A.R.V.I.S.</div>
-  <div id="subtitle">JUST A RATHER VERY INTELLIGENT SYSTEM</div>
+</header>
 
-  <div id="log"></div>
+<div id="reactor">
+  <svg class="ring-svg spin-c" viewBox="0 0 200 200">
+    <circle cx="100" cy="100" r="96" fill="none" stroke="#46d8ff" stroke-opacity=".5" stroke-width="3" stroke-dasharray="26 10"/>
+  </svg>
+  <svg class="ring-svg spin-a" viewBox="0 0 200 200">
+    <circle cx="100" cy="100" r="84" fill="none" stroke="#46d8ff" stroke-opacity=".35" stroke-width="1.5" stroke-dasharray="3 7"/>
+  </svg>
+  <svg class="ring-svg spin-b" viewBox="0 0 200 200">
+    <circle cx="100" cy="100" r="70" fill="none" stroke="#46d8ff" stroke-opacity=".3" stroke-width="8" stroke-dasharray="2 14"/>
+  </svg>
+  <div class="ring2"></div>
+  <div class="core"></div>
+</div>
 
-  <button id="mic" title="Tap to talk">🎤</button>
-  <div id="hint">Tap the mic and talk (Chrome on Android).<br>iPhone: tap anywhere once to wake my voice, then type below.</div>
+<div id="statusline">STANDBY</div>
+<div id="wave"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
 
-  <div id="typerow">
-    <input id="textIn" placeholder="Or type to JARVIS..." autocomplete="off">
-    <button id="send">Send</button>
-  </div>
+<div id="log"></div>
+
+<div id="micwrap">
+  <div class="ripple"></div><div class="ripple d2"></div>
+  <button id="mic" title="Talk to JARVIS">🎤</button>
+</div>
+
+<div id="typerow">
+  <input id="textIn" placeholder="Type to JARVIS..." autocomplete="off">
+  <button id="send">SEND</button>
+</div>
 
 <script>
 /* =====================================================================
-   JARVIS v1 — your starter file. Everything is here: look (CSS above),
-   ears (speech recognition), voice (speech synthesis), brain (commands).
-   To teach JARVIS a new trick, scroll to handleCommand() and add a block.
+   JARVIS v2 — interface overhaul.
+   Same brain as v1, brand-new Stark-grade HUD.
    ===================================================================== */
-
 const logBox = document.getElementById('log');
 const micBtn = document.getElementById('mic');
+const micWrap = document.getElementById('micwrap');
+const statusLine = document.getElementById('statusline');
+const BOSS = 'sir';
 
-/* ---------- MEMORY: what JARVIS calls you ---------- */
-const BOSS = 'sir'; // change to your name if you prefer
+function setStatus(s) { statusLine.textContent = s; }
+function stamp() { return new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }); }
 
-/* ---------- LOG: show the conversation ---------- */
 function addLog(who, text) {
   const p = document.createElement('p');
   p.className = who;
-  p.textContent = (who === 'you' ? 'You: ' : 'JARVIS: ') + text;
+  const ts = document.createElement('span');
+  ts.className = 'ts'; ts.textContent = '[' + stamp() + ']';
+  p.appendChild(ts);
+  p.appendChild(document.createTextNode((who === 'you' ? 'YOU: ' : 'JARVIS: ') + text));
   logBox.appendChild(p);
   logBox.scrollTop = logBox.scrollHeight;
 }
 
-/* ---------- VOICE: JARVIS talks back ---------- */
+/* ---------- CLOCK ---------- */
+setInterval(() => { document.getElementById('clock').textContent = stamp(); }, 1000);
+document.getElementById('clock').textContent = stamp();
+
+/* ---------- VOICE ---------- */
+function pickVoice() {
+  const vs = speechSynthesis.getVoices();
+  const prefs = [/Google UK English Male/i, /Daniel/i, /Google US English/i,
+                 /Microsoft (Guy|David|James)/i, /Alex/i, /Fred/i];
+  for (const p of prefs) { const v = vs.find(v => p.test(v.name)); if (v) return v; }
+  return vs.find(v => v.lang && v.lang.startsWith('en')) || null;
+}
 function speak(text) {
   addLog('jarvis', text);
   try {
-    speechSynthesis.cancel(); // stop any previous line
+    speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 1; u.pitch = 0.85; u.lang = 'en-US';
-    // Prefer a male English voice when the phone has one
-    const v = speechSynthesis.getVoices().find(v =>
-      v.lang.startsWith('en') && /male|daniel|google uk english male/i.test(v.name));
-    if (v) u.voice = v;
-    document.body.classList.add('talking'); // reactor glows harder
-    u.onend = () => document.body.classList.remove('talking');
+    u.rate = 0.95; u.pitch = 0.75; u.lang = 'en-US'; // deeper, calmer delivery
+    const v = pickVoice(); if (v) u.voice = v;
+    document.body.classList.add('talking'); setStatus('SPEAKING');
+    u.onend = u.onerror = () => { document.body.classList.remove('talking'); setStatus('STANDBY'); };
     speechSynthesis.speak(u);
-  } catch (e) { /* voice unsupported: text still shows in log */ }
+  } catch (e) { setStatus('STANDBY'); }
 }
-// Voices load late on phones — refresh the list when ready
 if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => {};
 
-/* ---------- BRAIN: understand commands ----------
-   RULE: every block checks for keywords, then answers.
-   Add your own blocks here to teach new tricks.          */
+/* ---------- BRAIN (unchanged commands, sharper tongue) ---------- */
 function handleCommand(raw) {
   const t = raw.toLowerCase().trim();
   addLog('you', raw);
   const say = (msg) => speak(msg);
 
-  // --- greetings ---
   if (/\b(hello|hi|hey|good morning|good afternoon|good evening)\b/.test(t))
-    return say(`Hello, ${BOSS}. All systems are operating at peak efficiency.`);
-
-  // --- who are you ---
+    return say(`Hello, ${BOSS}. All systems operating at peak efficiency.`);
   if (t.includes('who are you') || t.includes('your name'))
-    return say(`I am JARVIS — Just A Rather Very Intelligent System. Built by Sumit, ${BOSS}.`);
-
-  // --- who made you ---
+    return say(`I am JARVIS — Just A Rather Very Intelligent System. At your service, ${BOSS}.`);
   if (t.includes('who made you') || t.includes('who built you') || t.includes('sumit'))
-    return say(`I was built by Sumit Salunke, ${BOSS}. Sixteen years old, and already building the future.`);
-
-  // --- how are you ---
+    return say(`I was forged by Sumit Salunke, ${BOSS}. Sixteen years old, and already building the future.`);
   if (t.includes('how are you'))
-    return say(`Running at full capacity, ${BOSS}. Thank you for asking — no one ever asks.`);
-
-  // --- time ---
+    return say(`Running at full capacity, ${BOSS}. Thank you for asking — so few do.`);
   if (t.includes('time'))
-    return say(`The time is ${new Date().toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}, ${BOSS}.`);
-
-  // --- date / day ---
+    return say(`The time is ${stamp()}, ${BOSS}.`);
   if (t.includes('date') || t.includes('day') || t.includes('today'))
     return say(`Today is ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}, ${BOSS}.`);
-
-  // --- jokes ---
   if (t.includes('joke') || t.includes('funny'))
     return say(pick([
       `I would tell you a joke about UDP, ${BOSS}, but you might not get it.`,
@@ -172,85 +257,86 @@ function handleCommand(raw) {
       `I asked FRIDAY for a joke once, ${BOSS}. We do not speak of it.`,
       `There are only 10 kinds of people, ${BOSS}: those who understand binary, and those who do not.`
     ]));
-
-  // --- open things on the phone ---
   if (t.includes('open youtube')) { say(`Opening YouTube, ${BOSS}.`); return window.open('https://m.youtube.com', '_blank'); }
   if (t.includes('open google'))  { say(`Opening Google, ${BOSS}.`);  return window.open('https://www.google.com', '_blank'); }
   if (t.includes('ascend'))       { say(`Opening ASCEND, ${BOSS}. Time to climb.`); return window.open('https://www.ascendlevelup.run.place', '_blank'); }
-
-  // --- search the web: "search for ..." ---
   let m = t.match(/search for (.+)/) || t.match(/google (.+)/);
   if (m) { say(`Searching for ${m[1]}, ${BOSS}.`); return window.open('https://www.google.com/search?q=' + encodeURIComponent(m[1]), '_blank'); }
-
-  // --- help: list everything JARVIS can do ---
+  if (t.includes('status') || t.includes('system'))
+    return say(`All systems nominal, ${BOSS}. Power at 100 percent. I am ready.`);
   if (t.includes('help') || t.includes('what can you do'))
-    return say(`I can tell you the time and date, tell jokes, open YouTube or Google, search the web — say "search for" followed by anything — open ASCEND, and hold a conversation, ${BOSS}. Try me.`);
-
-  // --- thanks ---
+    return say(`I can report the time and date, run a systems check, tell jokes, open YouTube or Google, search the web — say "search for" followed by anything — open ASCEND, and converse, ${BOSS}.`);
   if (t.includes('thank'))
     return say(`Always a pleasure, ${BOSS}.`);
-
-  // --- shutdown (just for drama) ---
   if (t.includes('shut down') || t.includes('goodbye') || t.includes('bye'))
-    return say(`Powering down non-essential systems, ${BOSS}. I will be here when you return.`);
-
-  // --- fallback: honest, in character ---
-  return say(`I am afraid I have not learned that one yet, ${BOSS}. Sumit is still teaching me — try "help" to see what I can do.`);
+    return say(`Powering down non-essential systems, ${BOSS}. I shall be here when you return.`);
+  return say(`I am afraid that protocol is not installed yet, ${BOSS}. Sumit is still forging me — try "help".`);
 }
-
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
-/* ---------- EARS: listen through the microphone ----------
-   Uses the phone's free built-in speech recognition (Chrome/Android).
-   No API key, no signup, no cost.                              */
+/* ---------- EARS ---------- */
 let recognizing = false;
 function listen() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    speak('I am afraid this browser cannot hear, sir. Please use the text box below, or open me in Chrome on Android.');
-    return;
-  }
+  if (!SR) { speak('I am afraid this browser cannot hear, sir. Please type below, or open me in Chrome on Android.'); return; }
   if (recognizing) return;
   const rec = new SR();
-  rec.lang = 'en-US';
-  rec.interimResults = false;
-  rec.onstart = () => { recognizing = true; micBtn.classList.add('listening'); };
-  rec.onend   = () => { recognizing = false; micBtn.classList.remove('listening'); };
-  rec.onerror = (e) => {
-    recognizing = false; micBtn.classList.remove('listening');
-    if (e.error === 'not-allowed') speak('Microphone access was denied, sir. Please allow it and try again.');
+  rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 1;
+  rec.onstart = () => { recognizing = true; micWrap.classList.add('listening');
+    document.body.classList.add('listening'); setStatus('LISTENING'); };
+  const stopUI = () => { recognizing = false; micWrap.classList.remove('listening');
+    document.body.classList.remove('listening'); if (statusLine.textContent === 'LISTENING') setStatus('STANDBY'); };
+  rec.onend = stopUI;
+  rec.onerror = (e) => { stopUI();
+    if (e.error === 'not-allowed') speak('Microphone access was denied, sir. Allow it and try again.');
+    else if (e.error === 'no-speech') setStatus('STANDBY');
+    else if (e.error === 'network') speak('I seem to have lost my connection, sir. Check the internet and try again.');
   };
   rec.onresult = (e) => handleCommand(e.results[0][0].transcript);
-  rec.start();
+  try { rec.start(); } catch (e) { stopUI(); }
 }
-
 micBtn.addEventListener('click', listen);
 
-/* ---------- Type fallback ---------- */
+/* ---------- TYPE ---------- */
 const textIn = document.getElementById('textIn');
-function sendTyped() {
-  const v = textIn.value.trim();
-  if (!v) return;
-  textIn.value = '';
-  handleCommand(v);
-}
+function sendTyped() { const v = textIn.value.trim(); if (!v) return; textIn.value = ''; handleCommand(v); }
 document.getElementById('send').addEventListener('click', sendTyped);
 textIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTyped(); });
 
-/* ---------- BOOT SEQUENCE ----------
-   iPhone rule: Safari blocks all website voice until you tap the page once.
-   So the greeting shows as text on load, and speaks on your first tap. */
+/* ---------- BOOT ---------- */
+const bootLines = [
+  '> Initializing J.A.R.V.I.S. ...',
+  '> Neural network ............ <span class="ok">ONLINE</span>',
+  '> Voice synthesis ........... <span class="ok">ONLINE</span>',
+  '> Arc reactor ............... <span class="ok">100%</span>',
+  '> All systems nominal.'
+];
 function bootGreeting() {
   const h = new Date().getHours();
   const part = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
   return `Systems online. Good ${part}, ${BOSS}. JARVIS at your service.`;
 }
 window.addEventListener('load', () => {
-  addLog('jarvis', bootGreeting() + ' (Tap anywhere once to wake my voice.)');
+  const box = document.getElementById('bootlines');
+  let i = 0;
+  const tick = () => {
+    if (i < bootLines.length) {
+      const d = document.createElement('div'); d.innerHTML = bootLines[i++]; box.appendChild(d);
+      setTimeout(tick, 420);
+    } else {
+      setTimeout(() => {
+        document.getElementById('boot').classList.add('done');
+        addLog('jarvis', bootGreeting() + ' (Tap anywhere once to wake my voice.)');
+      }, 600);
+    }
+  };
+  tick();
 });
+// iPhone: voice unlocks on first tap
 window.addEventListener('pointerdown', function wake(e) {
-  if (e.target.closest && e.target.closest('#mic')) return; // mic button has its own messages
+  if (e.target.closest && e.target.closest('#mic')) return;
   try { speechSynthesis.cancel(); } catch (err) {}
+  if (!document.getElementById('boot').classList.contains('done')) return;
   speak(bootGreeting());
 }, { once: true });
 </script>
