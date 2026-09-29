@@ -309,9 +309,9 @@
    HUD unchanged; canned brain replaced by secure backend uplink.
    ===================================================================== */
 /* ================= ARMOUR TRIGGER PHRASES — ONE-EDIT SWAP =================
-   Add the user's secret phrase to ARMOUR_ON_PHRASES when he gives it.
+   "protocol arise" / "arise" is the user's secret max-performance code word.
    Plain text, case-insensitive substring match — no regex escaping needed. */
-const ARMOUR_ON_PHRASES = ["armour up", "suit up", "full power"];
+const ARMOUR_ON_PHRASES = ["protocol arise", "arise", "armour up", "suit up", "full power"];
 const ARMOUR_OFF_PHRASES = ["stand down", "armour off", "power down", "normal mode"];
 /* =============== end armour trigger phrases =============== */
 const logBox = document.getElementById('log');
@@ -456,8 +456,9 @@ function handleCommand(raw) {
   const hitOn = matchesAny(t, ARMOUR_ON_PHRASES);
   const hitOff = matchesAny(t, ARMOUR_OFF_PHRASES);
   if (hitOn && !hitOff) {
-    if (!armourMode) { setArmour(true); speak('Armour online, sir. Full potential engaged.'); }
-    else speak('Armour is already online, sir.');
+    const protocol = t.includes('arise');
+    if (!armourMode) { setArmour(true); speak(protocol ? 'Protocol ARISE acknowledged, sir. All systems at maximum.' : 'Armour online, sir. Full potential engaged.'); }
+    else speak(protocol ? 'Protocol ARISE is already active, sir.' : 'Armour is already online, sir.');
     return;
   }
   if (hitOff) {
