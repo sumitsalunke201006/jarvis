@@ -199,6 +199,20 @@
   #upSave { background: rgba(16,58,92,.6); border: 1px solid var(--cyan); color: #eaf7ff; }
   #upCancel { background: transparent; border: 1px solid var(--cyan-dim); color: var(--cyan); }
   .up-note { font-size: .58rem; opacity: .5; margin-top: 14px; line-height: 1.6; text-align: center; }
+
+  /* ---------- ARMOUR MODE ---------- */
+  #armourBanner { display: none; margin: 2px 0 0; font-family: 'Orbitron', sans-serif;
+    font-size: .68rem; letter-spacing: 4px; color: #ffd97a;
+    text-shadow: 0 0 12px rgba(255,120,60,.9);
+    border: 1px solid rgba(255,150,60,.55); background: rgba(60,10,4,.55);
+    padding: 8px 18px; z-index: 2;
+    clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+  body.armour-on #armourBanner { display: block; animation: armourPulse 1.6s ease-in-out infinite; }
+  @keyframes armourPulse { 0%,100% { box-shadow: 0 0 6px rgba(255,120,60,.35); }
+    50% { box-shadow: 0 0 22px rgba(255,120,60,.85); } }
+  body.armour-on #wave span { background: #ff7a4d; box-shadow: 0 0 8px #ff5a3c; }
+  body.armour-on .core { background: radial-gradient(circle, #fff 0%, #ffd9a8 30%, #ff8a4d 55%, #5c140b 100%);
+    box-shadow: 0 0 30px #ff7a4d, 0 0 90px rgba(255,110,60,.8), 0 0 160px rgba(255,110,60,.4); }
 </style>
 </head>
 <body>
@@ -255,6 +269,7 @@
   <div class="core"></div>
 </div>
 
+<div id="armourBanner">◆ ARMOUR ONLINE — 100%</div>
 <div id="statusline">STANDBY</div>
 <div id="wave"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
 
@@ -405,7 +420,7 @@ async function askBrain(raw) {
       method: 'POST',
       signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json', 'x-jarvis-key': cfg.key },
-      body: JSON.stringify({ message: raw, history: convoHistory.slice(-20) })
+      body: JSON.stringify({ message: raw, history: convoHistory.slice(-20), armour: armourMode })
     });
     clearTimeout(to);
     const data = await res.json().catch(() => ({}));
@@ -420,10 +435,29 @@ async function askBrain(raw) {
   }
 }
 
+/* ---------- ARMOUR MODE ---------- */
+let armourMode = false; // session state; sent with every /api/chat call
+const ARMOUR_ON_RE = /(armour up|armor up|get armour|get armor|suit up|full power)/i;
+const ARMOUR_OFF_RE = /(stand down|armour off|armor off|power down|normal mode)/i;
+function setArmour(on) {
+  armourMode = on;
+  document.body.classList.toggle('armour-on', on);
+}
+
 /* ---------- COMMANDS: instant device actions stay local, everything else -> neural core ---------- */
 function handleCommand(raw) {
   const t = raw.toLowerCase().trim();
   addLog('you', raw);
+  if (ARMOUR_ON_RE.test(t) && !ARMOUR_OFF_RE.test(t)) {
+    if (!armourMode) { setArmour(true); speak('Armour online, sir. Full potential engaged.'); }
+    else speak('Armour is already online, sir.');
+    return;
+  }
+  if (ARMOUR_OFF_RE.test(t)) {
+    if (armourMode) { setArmour(false); speak('Armour disengaged, sir.'); }
+    else speak('Armour is already offline, sir.');
+    return;
+  }
   if (t.includes('open youtube')) { speak('Opening YouTube, sir.'); return window.open('https://m.youtube.com', '_blank'); }
   if (t.includes('open google'))  { speak('Opening Google, sir.');  return window.open('https://www.google.com', '_blank'); }
   if (t.includes('ascend'))       { speak('Opening ASCEND, sir. Time to climb.'); return window.open('https://www.ascendlevelup.run.place', '_blank'); }
