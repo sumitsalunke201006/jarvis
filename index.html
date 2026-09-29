@@ -368,26 +368,53 @@ function handleCommand(raw) {
 }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
-/* ---------- EARS ---------- */
+/* ---------- EARS (patient: waits through thinking pauses) ---------- */
+const EAR_SILENCE_MS = 2500; // answer only after 2.5s of true silence
 let recognizing = false;
+let earRec = null, earFinal = '', earTimer = null, earDone = false;
+function earStopUI() {
+  recognizing = false; earRec = null;
+  micWrap.classList.remove('listening');
+  document.body.classList.remove('listening');
+  if (currentStatus === 'LISTENING' || currentStatus.indexOf('HEARD:') === 0) setStatus('STANDBY');
+}
+function earSubmit() {
+  if (earDone) return; earDone = true;
+  clearTimeout(earTimer);
+  const text = earFinal.trim();
+  const rec = earRec;
+  earStopUI();
+  try { rec && rec.stop(); } catch (e) {}
+  if (text) handleCommand(text);
+}
 function listen() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { speak('I am afraid this browser cannot hear, sir. Please type below, or open me in Chrome on Android.'); return; }
-  if (recognizing) return;
+  if (recognizing) { earSubmit(); return; } // second tap = "answer now"
   const rec = new SR();
-  rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 1;
+  rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
+  earRec = rec; earFinal = ''; earDone = false;
   rec.onstart = () => { recognizing = true; micWrap.classList.add('listening');
     document.body.classList.add('listening'); setStatus('LISTENING'); };
-  const stopUI = () => { recognizing = false; micWrap.classList.remove('listening');
-    document.body.classList.remove('listening'); if (currentStatus === 'LISTENING') setStatus('STANDBY'); };
-  rec.onend = stopUI;
-  rec.onerror = (e) => { stopUI();
-    if (e.error === 'not-allowed') speak('Microphone access was denied, sir. Allow it and try again.');
-    else if (e.error === 'no-speech') setStatus('STANDBY');
-    else if (e.error === 'network') speak('I seem to have lost my connection, sir. Check the internet and try again.');
+  const armSilence = () => { clearTimeout(earTimer); earTimer = setTimeout(earSubmit, EAR_SILENCE_MS); };
+  rec.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const tr = e.results[i][0].transcript;
+      if (e.results[i].isFinal) earFinal += tr + ' ';
+      else interim += tr;
+    }
+    const heard = (earFinal + interim).trim();
+    if (heard) setStatus('HEARD: ' + heard.slice(-42));
+    armSilence();
   };
-  rec.onresult = (e) => handleCommand(e.results[0][0].transcript);
-  try { rec.start(); } catch (e) { stopUI(); }
+  rec.onend = () => { if (!earDone && earFinal.trim()) earSubmit(); else earStopUI(); };
+  rec.onerror = (e) => {
+    if (e.error === 'not-allowed') { earStopUI(); speak('Microphone access was denied, sir. Allow it and try again.'); }
+    else if (e.error === 'network') { earStopUI(); speak('I seem to have lost my connection, sir. Check the internet and try again.'); }
+    else if (!earFinal.trim()) earStopUI();
+  };
+  try { rec.start(); } catch (e) { earStopUI(); }
 }
 micBtn.addEventListener('click', listen);
 
@@ -439,6 +466,7 @@ setTimeout(bgTick, 2500); setTimeout(bgTick, 4500);
    Web-maximum version: works while the page is open and the screen is on.
    True background wake (screen off / app closed) needs a native Android app. */
 let wakeMode = false, awake = false, awakeTimer = null;
+let wakeFinal = '', wakeTimer = null; // patient wake: accumulate speech, answer after silence
 const wakeChip = document.getElementById('wakechip');
 const WAKE_WINDOW = 15000; // stays awake 15s after last command
 function wakeModeOn() { return wakeMode; }
@@ -480,11 +508,15 @@ function wakeLoop() {
     }
     const heard = (finals + ' ' + interim).toLowerCase();
     if (!awake) {
-      if (heard.includes('jarvis')) doWakeUp();
-    } else if (finals.trim()) {
-      const cmd = finals.replace(/jarvis/gi, '').trim();
-      handleCommand(cmd || finals.trim());
-      prolongAwake();
+      if (heard.includes('jarvis')) { wakeFinal = ''; doWakeUp(); }
+    } else {
+      if (finals.trim()) wakeFinal += finals + ' ';
+      clearTimeout(wakeTimer);
+      wakeTimer = setTimeout(() => {
+        const cmd = wakeFinal.replace(/jarvis/gi, '').trim();
+        wakeFinal = '';
+        if (awake && cmd) { handleCommand(cmd); prolongAwake(); }
+      }, EAR_SILENCE_MS);
     }
   };
   rec.onend = () => { if (wakeMode) setTimeout(wakeLoop, 400); }; // auto-restart: always listening
@@ -509,10 +541,14 @@ function doWakeUp() {
 function prolongAwake() {
   clearTimeout(awakeTimer);
   awakeTimer = setTimeout(() => {
+    clearTimeout(wakeTimer);
+    const cmd = wakeFinal.replace(/jarvis/gi, '').trim();
+    wakeFinal = '';
     awake = false;
     document.body.classList.remove('awake');
     document.body.classList.add('wake-dormant');
     setStatus('DORMANT — SAY "JARVIS"');
+    if (cmd) handleCommand(cmd); // answer what he managed to say before dozing off
   }, WAKE_WINDOW);
 }
 
