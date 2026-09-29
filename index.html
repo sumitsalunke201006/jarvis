@@ -94,10 +94,14 @@
     font-family: inherit; font-size: .85rem; outline: none; opacity: 1; }
   #uplinkPanel input:focus { border-color: var(--cyan); }
   .up-row { display: flex; gap: 10px; margin-top: 4px; }
-  #upSave, #upCancel { flex: 1; font-family: 'Orbitron', sans-serif; font-size: .62rem; letter-spacing: 2px;
+  #upSave, #upCancel, #upTest { flex: 1; font-family: 'Orbitron', sans-serif; font-size: .62rem; letter-spacing: 2px;
     padding: 12px 0; cursor: pointer; }
   #upSave { background: rgba(16,58,92,.6); border: 1px solid var(--cyan); color: #eaf7ff; }
   #upCancel { background: transparent; border: 1px solid var(--cyan-dim); color: var(--cyan); }
+  #upTest { background: transparent; border: 1px solid var(--gold); color: var(--gold); }
+  .up-result { font-size: .6rem; line-height: 1.6; margin-top: 10px; min-height: 1.2em; text-align: center; opacity: .85; }
+  .up-result.good { color: #7dffb0; }
+  .up-result.bad { color: #ff9a8a; }
   .up-note { font-size: .58rem; opacity: .5; margin-top: 14px; line-height: 1.6; text-align: center; }
 
   #glfail { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center;
@@ -126,6 +130,10 @@
       <button id="upSave">ESTABLISH UPLINK</button>
       <button id="upCancel">CANCEL</button>
     </div>
+    <div class="up-row">
+      <button id="upTest">TEST UPLINK</button>
+    </div>
+    <div id="upTestResult" class="up-result"></div>
     <div class="up-note">Stored only on this device.<br>The passphrase is never displayed back.<br>Long-press the reactor core to reopen this panel.</div>
   </div>
 </div>
@@ -244,6 +252,31 @@ document.getElementById('upSave').addEventListener('click', () => {
   speak('Secure uplink established, sir. I am fully online.');
 });
 document.getElementById('upCancel').addEventListener('click', () => { hideUplink(); setStatus('STANDBY'); });
+document.getElementById('upTest').addEventListener('click', async () => {
+  const out = document.getElementById('upTestResult');
+  const url = document.getElementById('upUrl').value.trim().replace(/\/+$/, '');
+  if (!url || !/^https?:\/\//i.test(url)) { out.textContent = 'Enter a backend URL first.'; out.className = 'up-result bad'; return; }
+  out.textContent = 'Pinging neural core…'; out.className = 'up-result';
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 25000);
+    const res = await fetch(url + '/api/health', { signal: ctrl.signal });
+    clearTimeout(to);
+    const data = await res.json().catch(() => null);
+    if (res.ok && data && data.ok === true) {
+      out.textContent = 'UPLINK OK — brain reachable. If chat still fails, the passphrase does not match the BRAIN_KEY on Render.';
+      out.className = 'up-result good';
+    } else {
+      out.textContent = 'Brain answered oddly (HTTP ' + res.status + '). Try again in a few seconds — it may be waking up.';
+      out.className = 'up-result bad';
+    }
+  } catch (e) {
+    out.textContent = e && e.name === 'AbortError'
+      ? 'No answer in 25s — the brain may be waking from sleep. Wait 30s and test again.'
+      : 'No response. Check the URL, or the ALLOWED_ORIGIN on Render — it must be exactly https://sumitsalunke201006.github.io';
+    out.className = 'up-result bad';
+  }
+});
 
 /* ---------- BRAIN: neural core (backend) ---------- */
 let convoHistory = []; // last 10 exchanges, kept client-side only
@@ -269,7 +302,11 @@ async function askBrain(raw) {
     while (convoHistory.length > 20) convoHistory.shift();
     speak(reply);
   } catch (e) {
-    speak('Sir, my uplink to the neural core faltered. Give me a moment, then try again.');
+    if (e && e.name === 'AbortError') {
+      speak('Sir, the neural core is taking too long — likely waking from sleep. Give it thirty seconds, then try again.');
+    } else {
+      speak('Sir, my uplink to the neural core faltered. Give me a moment, then try again.');
+    }
   }
 }
 
