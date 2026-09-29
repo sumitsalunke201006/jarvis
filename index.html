@@ -98,6 +98,32 @@
   #wave span:nth-child(4n) { animation-delay: .4s; } #wave span:nth-child(5n) { animation-delay: .2s; }
   @keyframes wv { from { height: 6px; } to { height: 40px; } }
 
+  /* ---------- ORBITING PARTICLES ---------- */
+  .orbit { position: absolute; border-radius: 50%; pointer-events: none; }
+  .orbit i { position: absolute; top: -3px; left: 50%; margin-left: -3px; width: 6px; height: 6px;
+    border-radius: 50%; background: #bfeaff; box-shadow: 0 0 12px var(--cyan), 0 0 4px #fff; }
+  .o1 { inset: 16px; animation: spin 8s linear infinite; }
+  .o2 { inset: 46px; animation: spin 13s linear infinite reverse; }
+  .o3 { inset: 4px; animation: spin 22s linear infinite; }
+  .o3 i { background: var(--amber); box-shadow: 0 0 12px var(--amber); }
+
+  /* ---------- LIVE TELEMETRY ---------- */
+  #telemetry { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+    width: 100%; max-width: 520px; margin: 10px 0 4px; z-index: 2; }
+  .tstat { border: 1px solid var(--cyan-dim); background: rgba(1,8,16,.6); padding: 7px 4px; text-align: center;
+    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+  .tstat .k { font-size: .55rem; opacity: .55; letter-spacing: 2px; }
+  .tstat .v { font-family: 'Orbitron', sans-serif; font-size: .78rem; color: #eaf7ff;
+    text-shadow: 0 0 8px var(--cyan); margin-top: 3px; }
+
+  /* ---------- BACKGROUND ACTIVITY TICKER ---------- */
+  #activity { width: 100%; max-width: 520px; height: 68px; overflow: hidden;
+    border-left: 2px solid var(--cyan-dim); background: rgba(1,8,16,.45);
+    padding: 7px 10px; font-size: .64rem; opacity: .65; margin-bottom: 10px; z-index: 2; }
+  #activity div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.9;
+    animation: fadeSlide .5s ease; }
+  @keyframes fadeSlide { from { opacity: 0; transform: translateX(-10px); } }
+
   /* ---------- LOG ---------- */
   #log { width: 100%; max-width: 520px; flex: 1; min-height: 150px; max-height: 30vh; overflow-y: auto;
     border: 1px solid var(--cyan-dim); border-top: 2px solid var(--cyan-dim);
@@ -163,11 +189,23 @@
     <circle cx="100" cy="100" r="70" fill="none" stroke="#46d8ff" stroke-opacity=".3" stroke-width="8" stroke-dasharray="2 14"/>
   </svg>
   <div class="ring2"></div>
+  <div class="orbit o1"><i></i></div>
+  <div class="orbit o2"><i></i></div>
+  <div class="orbit o3"><i></i></div>
   <div class="core"></div>
 </div>
 
 <div id="statusline">STANDBY</div>
 <div id="wave"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+
+<div id="telemetry">
+  <div class="tstat"><div class="k">POWER</div><div class="v" id="tPwr">--</div></div>
+  <div class="tstat"><div class="k">CORE</div><div class="v" id="tTemp">--</div></div>
+  <div class="tstat"><div class="k">UPLINK</div><div class="v" id="tNet">--</div></div>
+  <div class="tstat"><div class="k">UPTIME</div><div class="v" id="tUp">--</div></div>
+</div>
+
+<div id="activity"></div>
 
 <div id="log"></div>
 
@@ -302,6 +340,49 @@ const textIn = document.getElementById('textIn');
 function sendTyped() { const v = textIn.value.trim(); if (!v) return; textIn.value = ''; handleCommand(v); }
 document.getElementById('send').addEventListener('click', sendTyped);
 textIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTyped(); });
+
+/* ---------- LIVING SYSTEM: telemetry + background processes ---------- */
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const T = { pwr: 97 + Math.random() * 2, temp: 35 + Math.random() * 3, net: 8 + Math.random() * 10, up: 0 };
+function fmtUp(s) {
+  const h = String(Math.floor(s / 3600)).padStart(2, '0');
+  const m = String(Math.floor(s / 60) % 60).padStart(2, '0');
+  const ss = String(s % 60).padStart(2, '0');
+  return `${h}:${m}:${ss}`;
+}
+setInterval(() => {
+  T.pwr = clamp(T.pwr + (Math.random() - .5) * .8, 94, 100);
+  T.temp = clamp(T.temp + (Math.random() - .5) * 1, 33, 42);
+  T.net = clamp(T.net + (Math.random() - .5) * 8, 6, 48);
+  T.up += 2;
+  document.getElementById('tPwr').textContent = T.pwr.toFixed(1) + '%';
+  document.getElementById('tTemp').textContent = T.temp.toFixed(1) + '°C';
+  document.getElementById('tNet').textContent = Math.round(T.net) + 'ms';
+  document.getElementById('tUp').textContent = fmtUp(T.up);
+}, 2000);
+
+const bgProcs = [
+  'Background scan complete — no anomalies detected',
+  'Power cell stable — output optimal',
+  'Security sweep — perimeter clear',
+  'Satellite uplink synchronized',
+  'Thermal levels nominal across all cores',
+  'Memory defragmentation complete',
+  'Archiving conversation logs — encrypted',
+  'Sensor grid calibrated',
+  'Standby protocols armed',
+  'Network handshake verified — 256-bit secure'
+];
+function bgTick() {
+  const box = document.getElementById('activity');
+  if (!box) return;
+  const d = document.createElement('div');
+  d.textContent = '» [' + stamp() + '] ' + pick(bgProcs);
+  box.appendChild(d);
+  while (box.children.length > 4) box.removeChild(box.firstChild);
+}
+setInterval(bgTick, 5200);
+setTimeout(bgTick, 2500); setTimeout(bgTick, 4500);
 
 /* ---------- BOOT ---------- */
 const bootLines = [
