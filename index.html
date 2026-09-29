@@ -12,41 +12,19 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  :root {
-    --cyan: #46d8ff;
-    --cyan-dim: rgba(70, 216, 255, .28);
-    --amber: #ffc857;
-  }
+  :root { --cyan: #46d8ff; --cyan-dim: rgba(70,216,255,.28); --amber: #ffc857; }
   html, body { height: 100%; }
   body {
-    background: #010409;
-    background-image:
-      radial-gradient(ellipse 90% 55% at 50% 32%, rgba(20, 70, 110, .35) 0%, transparent 70%),
-      repeating-linear-gradient(0deg, rgba(70,216,255,.045) 0 1px, transparent 1px 46px),
-      repeating-linear-gradient(90deg, rgba(70,216,255,.045) 0 1px, transparent 1px 46px);
-    color: var(--cyan);
+    background: #010409; color: var(--cyan);
     font-family: 'Share Tech Mono', monospace;
-    min-height: 100vh;
-    display: flex; flex-direction: column; align-items: center;
-    padding: 18px 14px 26px;
-    overflow-x: hidden;
-    position: relative;
+    overflow: hidden; overscroll-behavior: none;
   }
-
-  /* HUD corner brackets */
-  .corner { position: fixed; width: 26px; height: 26px; border: 2px solid var(--cyan-dim); z-index: 5; pointer-events: none; }
-  .c-tl { top: 10px; left: 10px; border-right: 0; border-bottom: 0; }
-  .c-tr { top: 10px; right: 10px; border-left: 0; border-bottom: 0; }
-  .c-bl { bottom: 10px; left: 10px; border-right: 0; border-top: 0; }
-  .c-br { bottom: 10px; right: 10px; border-left: 0; border-top: 0; }
-
-  /* slow scanline sweep */
-  #scan { position: fixed; left: 0; right: 0; height: 120px; top: -140px; z-index: 4; pointer-events: none;
-    background: linear-gradient(180deg, transparent, rgba(70,216,255,.06), transparent);
-    animation: sweep 7s linear infinite; }
-  @keyframes sweep { to { transform: translateY(130vh); } }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: manipulation; }
 
   /* ---------- BOOT OVERLAY ---------- */
   #boot { position: fixed; inset: 0; background: #010409; z-index: 50;
@@ -61,90 +39,17 @@
   #bootTap.show { display: block; }
   @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
 
-  /* ---------- HEADER ---------- */
-  header { text-align: center; margin: 10px 0 4px; z-index: 2; }
-  h1 { font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 2rem; letter-spacing: 10px;
-       color: #eaf7ff; text-shadow: 0 0 18px var(--cyan), 0 0 60px rgba(70,216,255,.5); margin-left: 10px; }
-  #sub { font-size: .62rem; letter-spacing: 3px; opacity: .6; margin-top: 6px; }
-  #sysrow { display: flex; gap: 14px; justify-content: center; margin-top: 10px; font-size: .66rem; opacity: .85; }
-  #sysrow .dot { color: #7dffb2; text-shadow: 0 0 8px #7dffb2; }
-
-  /* ---------- ARC REACTOR ---------- */
-  #reactor { position: relative; width: 230px; height: 230px; margin: 14px 0 6px; z-index: 2;
-             animation: reactorIn 1.2s ease-out; }
-  @keyframes reactorIn { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-  #reactor svg.ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .spin-a { animation: spin 26s linear infinite; }
-  .spin-b { animation: spin 17s linear infinite reverse; }
-  .spin-c { animation: spin 40s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .ring2 { position: absolute; inset: 34px; border-radius: 50%;
-           border: 1px solid var(--cyan-dim); box-shadow: 0 0 14px rgba(70,216,255,.35), inset 0 0 14px rgba(70,216,255,.25); }
-  .core { position: absolute; inset: 74px; border-radius: 50%;
-    background: radial-gradient(circle, #ffffff 0%, #bfeaff 30%, #46d8ff 55%, #0b3b5c 100%);
-    box-shadow: 0 0 30px #46d8ff, 0 0 90px rgba(70,216,255,.8), 0 0 160px rgba(70,216,255,.4);
-    animation: pulse 2.6s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.07); } }
-  body.talking .core { animation-duration: .6s; }
-  body.talking #reactor { filter: brightness(1.35); }
-  body.listening .core { background: radial-gradient(circle, #fff 0%, #ffe9b8 35%, var(--amber) 60%, #5c3a0b 100%);
-    box-shadow: 0 0 30px var(--amber), 0 0 90px rgba(255,200,87,.8); }
-
-  /* ---------- STATUS + WAVEFORM ---------- */
-  #statusline { font-family: 'Orbitron', sans-serif; font-size: .72rem; letter-spacing: 5px;
-    margin: 6px 0 2px; color: #bfeaff; text-shadow: 0 0 10px var(--cyan); min-height: 1.2em; }
-  #wave { display: flex; align-items: center; gap: 4px; height: 44px; margin: 4px 0 8px; }
-  #wave span { width: 4px; height: 6px; border-radius: 2px; background: var(--cyan-dim); }
-  body.listening #wave span, body.talking #wave span {
-    background: var(--cyan); box-shadow: 0 0 8px var(--cyan);
-    animation: wv .7s ease-in-out infinite alternate; }
-  body.listening #wave span { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
-  #wave span:nth-child(odd) { animation-delay: .12s; } #wave span:nth-child(3n) { animation-delay: .28s; }
-  #wave span:nth-child(4n) { animation-delay: .4s; } #wave span:nth-child(5n) { animation-delay: .2s; }
-  @keyframes wv { from { height: 6px; } to { height: 40px; } }
-
-  /* ---------- ORBITING PARTICLES ---------- */
-  .orbit { position: absolute; border-radius: 50%; pointer-events: none; }
-  .orbit i { position: absolute; top: -3px; left: 50%; margin-left: -3px; width: 6px; height: 6px;
-    border-radius: 50%; background: #bfeaff; box-shadow: 0 0 12px var(--cyan), 0 0 4px #fff; }
-  .o1 { inset: 16px; animation: spin 8s linear infinite; }
-  .o2 { inset: 46px; animation: spin 13s linear infinite reverse; }
-  .o3 { inset: 4px; animation: spin 22s linear infinite; }
-  .o3 i { background: var(--amber); box-shadow: 0 0 12px var(--amber); }
-
-  /* ---------- LIVE TELEMETRY ---------- */
-  #telemetry { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
-    width: 100%; max-width: 520px; margin: 10px 0 4px; z-index: 2; }
-  .tstat { border: 1px solid var(--cyan-dim); background: rgba(1,8,16,.6); padding: 7px 4px; text-align: center;
-    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
-  .tstat .k { font-size: .55rem; opacity: .55; letter-spacing: 2px; }
-  .tstat .v { font-family: 'Orbitron', sans-serif; font-size: .78rem; color: #eaf7ff;
-    text-shadow: 0 0 8px var(--cyan); margin-top: 3px; }
-
-  /* ---------- BACKGROUND ACTIVITY TICKER ---------- */
-  #activity { width: 100%; max-width: 520px; height: 68px; overflow: hidden;
-    border-left: 2px solid var(--cyan-dim); background: rgba(1,8,16,.45);
-    padding: 7px 10px; font-size: .64rem; opacity: .65; margin-bottom: 10px; z-index: 2; }
-  #activity div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.9;
-    animation: fadeSlide .5s ease; }
-  @keyframes fadeSlide { from { opacity: 0; transform: translateX(-10px); } }
-
-  /* ---------- LOG ---------- */
-  #log { width: 100%; max-width: 520px; flex: 1; min-height: 150px; max-height: 30vh; overflow-y: auto;
-    border: 1px solid var(--cyan-dim); border-top: 2px solid var(--cyan-dim);
-    background: rgba(1, 8, 16, .72); padding: 12px 14px; font-size: .82rem;
-    clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
-    z-index: 2; }
-  #log p { margin: 8px 0; line-height: 1.5; }
-  #log .ts { opacity: .45; font-size: .68rem; margin-right: 6px; }
-  #log .you { color: var(--amber); }
-  #log .jarvis { color: #bfeaff; }
-
-  /* ---------- MIC ---------- */
-  #micwrap { position: relative; margin: 16px 0 4px; z-index: 2; }
-  #mic { width: 88px; height: 88px; border-radius: 50%; cursor: pointer;
+  /* ---------- CONTROL DOCK (minimal 2D, floats above the 3D scene) ---------- */
+  #dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 10px 14px calc(16px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, transparent, rgba(1,4,9,.55) 60%);
+    pointer-events: none; }
+  #dock > * { pointer-events: auto; }
+  #micwrap { position: relative; margin-bottom: 8px; }
+  #mic { width: 76px; height: 76px; border-radius: 50%; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    background: radial-gradient(circle at 35% 30%, #103a5c, #04121f 75%);
+    background: radial-gradient(circle at 35% 30%, rgba(16,58,92,.85), rgba(4,18,31,.9) 75%);
     border: 2px solid var(--cyan); color: #eaf7ff;
     box-shadow: 0 0 24px rgba(70,216,255,.55), inset 0 0 18px rgba(70,216,255,.25); }
   #mic:active { transform: scale(.92); }
@@ -156,27 +61,22 @@
   #micwrap.listening .ripple.d2 { animation-delay: .8s; }
   @keyframes rip { 0% { transform: scale(1); opacity: .8; } 100% { transform: scale(1.9); opacity: 0; } }
 
-  /* ---------- WAKE WORD ---------- */
-  #wakechip { margin-top: 14px; font-family: 'Orbitron', sans-serif; font-size: .6rem; letter-spacing: 3px;
-    background: transparent; border: 1px solid var(--cyan-dim); color: var(--cyan);
-    padding: 11px 24px; cursor: pointer; z-index: 2;
+  #wakechip { margin-bottom: 10px; font-family: 'Orbitron', sans-serif; font-size: .58rem; letter-spacing: 3px;
+    background: rgba(1,8,16,.55); border: 1px solid var(--cyan-dim); color: var(--cyan);
+    padding: 10px 22px; cursor: pointer;
     clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
   #wakechip.armed { border-color: var(--amber); color: var(--amber);
     box-shadow: 0 0 16px rgba(255,200,87,.45); }
-  body.wake-dormant .core { filter: saturate(.5) brightness(.8); }
-  body.awake .core { animation-duration: .55s; }
-  body.awake #reactor { filter: brightness(1.35); }
-  body.awake #wave span { background: var(--amber); box-shadow: 0 0 8px var(--amber);
-    animation: wv .55s ease-in-out infinite alternate; }
 
-  #typerow { display: flex; width: 100%; max-width: 520px; margin-top: 12px; gap: 8px; z-index: 2; }
-  #textIn { flex: 1; background: rgba(1,8,16,.8); border: 1px solid var(--cyan-dim);
+  #typerow { display: flex; width: 100%; max-width: 520px; gap: 8px; }
+  #textIn { flex: 1; background: rgba(1,8,16,.78); border: 1px solid var(--cyan-dim);
     color: #eaf7ff; padding: 12px; font-family: inherit; font-size: .88rem; outline: none;
     clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px); }
   #textIn:focus { border-color: var(--cyan); }
   #send { background: rgba(16,58,92,.6); border: 1px solid var(--cyan); color: #eaf7ff;
     padding: 0 20px; font-family: 'Orbitron', sans-serif; font-size: .7rem; letter-spacing: 2px; cursor: pointer; }
   #send:active { transform: scale(.95); }
+  #dockhint { margin-top: 8px; font-size: .55rem; letter-spacing: 2px; opacity: .4; pointer-events: none; }
 
   /* ---------- SECURE UPLINK SETUP ---------- */
   #uplink { position: fixed; inset: 0; background: rgba(1,4,9,.94); z-index: 60;
@@ -200,26 +100,13 @@
   #upCancel { background: transparent; border: 1px solid var(--cyan-dim); color: var(--cyan); }
   .up-note { font-size: .58rem; opacity: .5; margin-top: 14px; line-height: 1.6; text-align: center; }
 
-  /* ---------- ARMOUR MODE ---------- */
-  #armourBanner { display: none; margin: 2px 0 0; font-family: 'Orbitron', sans-serif;
-    font-size: .68rem; letter-spacing: 4px; color: #ffd97a;
-    text-shadow: 0 0 12px rgba(255,120,60,.9);
-    border: 1px solid rgba(255,150,60,.55); background: rgba(60,10,4,.55);
-    padding: 8px 18px; z-index: 2;
-    clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
-  body.armour-on #armourBanner { display: block; animation: armourPulse 1.6s ease-in-out infinite; }
-  @keyframes armourPulse { 0%,100% { box-shadow: 0 0 6px rgba(255,120,60,.35); }
-    50% { box-shadow: 0 0 22px rgba(255,120,60,.85); } }
-  body.armour-on #wave span { background: #ff7a4d; box-shadow: 0 0 8px #ff5a3c; }
-  body.armour-on .core { background: radial-gradient(circle, #fff 0%, #ffd9a8 30%, #ff8a4d 55%, #5c140b 100%);
-    box-shadow: 0 0 30px #ff7a4d, 0 0 90px rgba(255,110,60,.8), 0 0 160px rgba(255,110,60,.4); }
+  #glfail { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center;
+    background: #010409; color: var(--cyan); padding: 30px; text-align: center; font-size: .8rem; line-height: 2; }
 </style>
 </head>
 <body>
 
-<div class="corner c-tl"></div><div class="corner c-tr"></div>
-<div class="corner c-bl"></div><div class="corner c-br"></div>
-<div id="scan"></div>
+<canvas id="scene"></canvas>
 
 <!-- BOOT SEQUENCE -->
 <div id="boot"><div id="bootlines"></div><div id="bootTap">▸ TAP TO WAKE JARVIS</div></div>
@@ -239,74 +126,39 @@
       <button id="upSave">ESTABLISH UPLINK</button>
       <button id="upCancel">CANCEL</button>
     </div>
-    <div class="up-note">Stored only on this device.<br>The passphrase is never displayed back.</div>
+    <div class="up-note">Stored only on this device.<br>The passphrase is never displayed back.<br>Long-press the reactor core to reopen this panel.</div>
   </div>
 </div>
 
-<header>
-  <h1>JARVIS</h1>
-  <div id="sub">JUST A RATHER VERY INTELLIGENT SYSTEM</div>
-  <div id="sysrow">
-    <span><span class="dot">●</span> SYSTEMS NOMINAL</span>
-    <span id="clock">--:--</span>
+<!-- CONTROL DOCK -->
+<div id="dock">
+  <div id="micwrap">
+    <div class="ripple"></div><div class="ripple d2"></div>
+    <button id="mic" title="Talk to JARVIS">
+      <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+        <rect x="9" y="2.5" width="6" height="11" rx="3"/>
+        <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/>
+        <path d="M12 18v3.5"/>
+        <path d="M8.5 21.5h7"/>
+      </svg>
+    </button>
   </div>
-</header>
-
-<div id="reactor">
-  <svg class="ring-svg spin-c" viewBox="0 0 200 200">
-    <circle cx="100" cy="100" r="96" fill="none" stroke="#46d8ff" stroke-opacity=".5" stroke-width="3" stroke-dasharray="26 10"/>
-  </svg>
-  <svg class="ring-svg spin-a" viewBox="0 0 200 200">
-    <circle cx="100" cy="100" r="84" fill="none" stroke="#46d8ff" stroke-opacity=".35" stroke-width="1.5" stroke-dasharray="3 7"/>
-  </svg>
-  <svg class="ring-svg spin-b" viewBox="0 0 200 200">
-    <circle cx="100" cy="100" r="70" fill="none" stroke="#46d8ff" stroke-opacity=".3" stroke-width="8" stroke-dasharray="2 14"/>
-  </svg>
-  <div class="ring2"></div>
-  <div class="orbit o1"><i></i></div>
-  <div class="orbit o2"><i></i></div>
-  <div class="orbit o3"><i></i></div>
-  <div class="core"></div>
+  <button id="wakechip">◉ WAKE WORD : OFF</button>
+  <div id="typerow">
+    <input id="textIn" placeholder="Type to JARVIS..." autocomplete="off">
+    <button id="send">SEND</button>
+  </div>
+  <div id="dockhint">LONG-PRESS CORE · UPLINK</div>
 </div>
 
-<div id="armourBanner">◆ ARMOUR ONLINE — 100%</div>
-<div id="statusline">STANDBY</div>
-<div id="wave"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+<div id="glfail"><div>3D SYSTEMS OFFLINE<br><span style="opacity:.6">This browser could not start WebGL.<br>Voice and uplink still work below.</span></div></div>
 
-<div id="telemetry">
-  <div class="tstat"><div class="k">POWER</div><div class="v" id="tPwr">--</div></div>
-  <div class="tstat"><div class="k">CORE</div><div class="v" id="tTemp">--</div></div>
-  <div class="tstat"><div class="k">UPLINK</div><div class="v" id="tNet">--</div></div>
-  <div class="tstat"><div class="k">UPTIME</div><div class="v" id="tUp">--</div></div>
-</div>
-
-<div id="activity"></div>
-
-<div id="log"></div>
-
-<div id="micwrap">
-  <div class="ripple"></div><div class="ripple d2"></div>
-  <button id="mic" title="Talk to JARVIS">
-    <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-      <rect x="9" y="2.5" width="6" height="11" rx="3"/>
-      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/>
-      <path d="M12 18v3.5"/>
-      <path d="M8.5 21.5h7"/>
-    </svg>
-  </button>
-</div>
-
-<button id="wakechip">◉ WAKE WORD : OFF</button>
-
-<div id="typerow">
-  <input id="textIn" placeholder="Type to JARVIS..." autocomplete="off">
-  <button id="send">SEND</button>
-</div>
-
-<script>
+<script type="module">
+import * as THREE from 'three';
 /* =====================================================================
-   JARVIS v3 — neural uplink.
-   HUD unchanged; canned brain replaced by secure backend uplink.
+   JARVIS v4 — full-screen 3D immersive HUD.
+   All brain wiring preserved: wake word, neural uplink, armour/ARISE,
+   secure uplink panel, local commands. The DISPLAY is now fully 3D.
    ===================================================================== */
 /* ================= ARMOUR TRIGGER PHRASES — ONE-EDIT SWAP =================
    "protocol arise" / "arise" is the user's secret max-performance code word.
@@ -314,29 +166,21 @@
 const ARMOUR_ON_PHRASES = ["protocol arise", "arise", "armour up", "suit up", "full power"];
 const ARMOUR_OFF_PHRASES = ["stand down", "armour off", "power down", "normal mode"];
 /* =============== end armour trigger phrases =============== */
-const logBox = document.getElementById('log');
 const micBtn = document.getElementById('mic');
 const micWrap = document.getElementById('micwrap');
-const statusLine = document.getElementById('statusline');
 const BOSS = 'sir';
 
-function setStatus(s) { statusLine.textContent = s; }
 function stamp() { return new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }); }
 
+/* ---------- STATUS + LOG → 3D panels (guards: safe before scene init) ---------- */
+let currentStatus = 'STANDBY';
+function setStatus(s) { currentStatus = s; drawStatus(); }
+const logEntries = []; // {who, text, ts} — rendered onto the 3D comms panel
 function addLog(who, text) {
-  const p = document.createElement('p');
-  p.className = who;
-  const ts = document.createElement('span');
-  ts.className = 'ts'; ts.textContent = '[' + stamp() + ']';
-  p.appendChild(ts);
-  p.appendChild(document.createTextNode((who === 'you' ? 'YOU: ' : 'JARVIS: ') + text));
-  logBox.appendChild(p);
-  logBox.scrollTop = logBox.scrollHeight;
+  logEntries.push({ who, text, ts: stamp() });
+  while (logEntries.length > 24) logEntries.shift();
+  drawLog();
 }
-
-/* ---------- CLOCK ---------- */
-setInterval(() => { document.getElementById('clock').textContent = stamp(); }, 1000);
-document.getElementById('clock').textContent = stamp();
 
 /* ---------- VOICE ---------- */
 function pickVoice() {
@@ -360,7 +204,6 @@ function speak(text) {
     };
     u.onend = u.onerror = endSpeech;
     // iOS Safari goes silent if cancel() and speak() run back-to-back while idle.
-    // Only cancel when something is actually speaking, then give it a breath.
     if (speechSynthesis.speaking) {
       speechSynthesis.cancel();
       setTimeout(() => speechSynthesis.speak(u), 150);
@@ -376,7 +219,7 @@ if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => {};
 
 /* ---------- SECURE UPLINK (neural core connection) ---------- */
 // Pages build marker — do not remove:
-const uplinkSetup = 'v1-brain';
+const uplinkSetup = 'v4-3d';
 const UPLINK_LS_URL = 'jarvis_uplink_url';
 const UPLINK_LS_KEY = 'jarvis_uplink_key';
 function getUplink() {
@@ -401,17 +244,6 @@ document.getElementById('upSave').addEventListener('click', () => {
   speak('Secure uplink established, sir. I am fully online.');
 });
 document.getElementById('upCancel').addEventListener('click', () => { hideUplink(); setStatus('STANDBY'); });
-// long-press (800ms) the arc reactor to reopen uplink settings
-(function () {
-  let pressT = null;
-  const reactor = document.getElementById('reactor');
-  reactor.addEventListener('pointerdown', () => {
-    clearTimeout(pressT);
-    pressT = setTimeout(showUplink, 800);
-  });
-  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev =>
-    reactor.addEventListener(ev, () => clearTimeout(pressT)));
-})();
 
 /* ---------- BRAIN: neural core (backend) ---------- */
 let convoHistory = []; // last 10 exchanges, kept client-side only
@@ -447,6 +279,9 @@ function matchesAny(t, phrases) { return phrases.some(p => t.includes(p)); }
 function setArmour(on) {
   armourMode = on;
   document.body.classList.toggle('armour-on', on);
+  ariseTarget = on ? 1 : 0; // 3D power-up transformation target
+  if (on) { triggerShockwave(); powerTone(true); }
+  else powerTone(false);
 }
 
 /* ---------- COMMANDS: instant device actions stay local, everything else -> neural core ---------- */
@@ -486,7 +321,7 @@ function listen() {
   rec.onstart = () => { recognizing = true; micWrap.classList.add('listening');
     document.body.classList.add('listening'); setStatus('LISTENING'); };
   const stopUI = () => { recognizing = false; micWrap.classList.remove('listening');
-    document.body.classList.remove('listening'); if (statusLine.textContent === 'LISTENING') setStatus('STANDBY'); };
+    document.body.classList.remove('listening'); if (currentStatus === 'LISTENING') setStatus('STANDBY'); };
   rec.onend = stopUI;
   rec.onerror = (e) => { stopUI();
     if (e.error === 'not-allowed') speak('Microphone access was denied, sir. Allow it and try again.');
@@ -518,10 +353,7 @@ setInterval(() => {
   T.temp = clamp(T.temp + (Math.random() - .5) * 1, 33, 42);
   T.net = clamp(T.net + (Math.random() - .5) * 8, 6, 48);
   T.up += 2;
-  document.getElementById('tPwr').textContent = T.pwr.toFixed(1) + '%';
-  document.getElementById('tTemp').textContent = T.temp.toFixed(1) + '°C';
-  document.getElementById('tNet').textContent = Math.round(T.net) + 'ms';
-  document.getElementById('tUp').textContent = fmtUp(T.up);
+  drawTele();
 }, 2000);
 
 const bgProcs = [
@@ -536,13 +368,11 @@ const bgProcs = [
   'Standby protocols armed',
   'Network handshake verified — 256-bit secure'
 ];
+const actLines = [];
 function bgTick() {
-  const box = document.getElementById('activity');
-  if (!box) return;
-  const d = document.createElement('div');
-  d.textContent = '» [' + stamp() + '] ' + pick(bgProcs);
-  box.appendChild(d);
-  while (box.children.length > 4) box.removeChild(box.firstChild);
+  actLines.push('» [' + stamp() + '] ' + pick(bgProcs));
+  while (actLines.length > 4) actLines.shift();
+  drawActivity();
 }
 setInterval(bgTick, 5200);
 setTimeout(bgTick, 2500); setTimeout(bgTick, 4500);
@@ -628,12 +458,489 @@ function prolongAwake() {
   }, WAKE_WINDOW);
 }
 
+/* ==================== 3D IMMERSIVE SCENE ====================
+   Full-screen Stark HUD. All brain wiring above is untouched —
+   it drives this scene through body classes + the draw*() hooks. */
+const canvas = document.getElementById('scene');
+const isMobile = matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) < 700;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const hwCores = navigator.hardwareConcurrency || 4;
+
+let renderer = null, scene3 = null, camera = null;
+let threeOK = false;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: !isMobile, powerPreference: 'high-performance' });
+  threeOK = true;
+} catch (e) { threeOK = false; }
+if (!threeOK) document.getElementById('glfail').style.display = 'flex';
+
+/* palette + ARISE state (0 = calm cyan, 1 = arise red/orange) */
+const COL = {
+  calmMain: new THREE.Color(0x46d8ff), ariseMain: new THREE.Color(0xff5a3c),
+  calmCore: new THREE.Color(0xd8f4ff), ariseCore: new THREE.Color(0xffd9a8),
+  amber: new THREE.Color(0xffc857),
+};
+let ariseT = 0, ariseTarget = 0;
+const _c1 = new THREE.Color();
+function mixMain(out) { return out.copy(COL.calmMain).lerp(COL.ariseMain, ariseT); }
+function css(col) { return '#' + col.getHexString(); }
+const easeInOut = (x) => x < .5 ? 2*x*x : 1 - Math.pow(-2*x+2, 2)/2;
+
+/* panel handles (assigned in init3D) */
+let clockPanel = null, telePanel = null, actPanel = null,
+    statusPanel = null, logPanel = null, bannerPanel = null;
+const panels = [];
+
+function wrap(ctx, text, maxW) {
+  const words = String(text).split(' '), lines = [];
+  let line = '';
+  for (const wd of words) {
+    const t = line ? line + ' ' + wd : wd;
+    if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = wd; }
+    else line = t;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+function frame(ctx, w, h, colCss, title) {
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(2,12,24,0.66)'; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = colCss; ctx.globalAlpha = 0.85; ctx.lineWidth = 3;
+  ctx.strokeRect(5, 5, w - 10, h - 10); ctx.globalAlpha = 1;
+  ctx.lineWidth = 7; const L = 30;
+  ctx.beginPath();
+  ctx.moveTo(8+L,8); ctx.lineTo(8,8); ctx.lineTo(8,8+L);
+  ctx.moveTo(w-8-L,8); ctx.lineTo(w-8,8); ctx.lineTo(w-8,8+L);
+  ctx.moveTo(8,h-8-L); ctx.lineTo(8,h-8); ctx.lineTo(8+L,h-8);
+  ctx.moveTo(w-8-L,h-8); ctx.lineTo(w-8,h-8); ctx.lineTo(w-8,h-8-L);
+  ctx.stroke();
+  if (title) {
+    ctx.fillStyle = colCss; ctx.font = '700 22px Orbitron, monospace';
+    ctx.fillText(title, 24, 42);
+    ctx.fillRect(24, 52, w - 48, 2);
+  }
+}
+
+/* ---------- panel draw functions (safe to call before init) ---------- */
+function drawClock() {
+  if (!clockPanel) return;
+  const col = css(mixMain(_c1));
+  clockPanel.redraw((ctx, w, h) => {
+    frame(ctx, w, h, col, 'CHRONO // IST');
+    const d = new Date();
+    ctx.fillStyle = '#eaf7ff'; ctx.font = '700 62px Orbitron, monospace'; ctx.textAlign = 'center';
+    ctx.fillText(d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }), w/2, 122);
+    ctx.font = '20px "Share Tech Mono", monospace'; ctx.fillStyle = col;
+    ctx.fillText(d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase(), w/2, 156);
+    ctx.textAlign = 'left';
+  });
+}
+function drawTele() {
+  if (!telePanel) return;
+  const col = css(mixMain(_c1));
+  telePanel.redraw((ctx, w, h) => {
+    frame(ctx, w, h, col, 'TELEMETRY');
+    const items = [['POWER', T.pwr.toFixed(1) + '%'], ['CORE', T.temp.toFixed(1) + '°C'],
+                   ['UPLINK', Math.round(T.net) + 'ms'], ['UPTIME', fmtUp(T.up)]];
+    ctx.textAlign = 'center';
+    items.forEach(([k, v], i) => {
+      const x = w/4 + (i%2) * w/2, y = 108 + Math.floor(i/2) * 74;
+      ctx.fillStyle = col; ctx.globalAlpha = 0.6; ctx.font = '18px "Share Tech Mono", monospace';
+      ctx.fillText(k, x, y - 26); ctx.globalAlpha = 1;
+      ctx.fillStyle = '#eaf7ff'; ctx.font = '700 30px Orbitron, monospace';
+      ctx.fillText(v, x, y + 8);
+    });
+    ctx.textAlign = 'left';
+  });
+}
+function drawActivity() {
+  if (!actPanel) return;
+  const col = css(mixMain(_c1));
+  actPanel.redraw((ctx, w, h) => {
+    frame(ctx, w, h, col, 'BACKGROUND PROCESSES');
+    ctx.font = '19px "Share Tech Mono", monospace';
+    actLines.forEach((ln, i) => {
+      ctx.fillStyle = 'rgba(207,238,255,0.75)';
+      const lines = wrap(ctx, ln, w - 56);
+      ctx.fillText(lines[0].slice(0, 52), 28, 104 + i * 56);
+    });
+  });
+}
+function drawStatus() {
+  if (!statusPanel) return;
+  const b = document.body.classList;
+  const hot = b.contains('listening') || b.contains('awake');
+  const col = hot ? '#ffc857' : css(mixMain(_c1));
+  statusPanel.redraw((ctx, w, h) => {
+    frame(ctx, w, h, col, 'STATUS');
+    ctx.fillStyle = hot ? '#ffe9b8' : '#eaf7ff';
+    ctx.font = '700 30px Orbitron, monospace'; ctx.textAlign = 'center';
+    const lines = wrap(ctx, currentStatus, w - 60);
+    ctx.fillText(lines[0] || '', w/2, 100);
+    ctx.textAlign = 'left';
+  });
+}
+function drawLog() {
+  if (!logPanel) return;
+  const col = css(mixMain(_c1));
+  logPanel.redraw((ctx, w, h) => {
+    frame(ctx, w, h, col, 'COMMS LOG');
+    ctx.font = '21px "Share Tech Mono", monospace';
+    const lh = 27;
+    let y = h - 26;
+    for (let i = logEntries.length - 1; i >= 0; i--) {
+      const e = logEntries[i];
+      const color = e.who === 'you' ? '#ffc857' : '#cfeeff';
+      const lines = wrap(ctx, '[' + e.ts + '] ' + (e.who === 'you' ? 'YOU' : 'JARVIS') + ': ' + e.text, w - 58);
+      for (let j = lines.length - 1; j >= 0; j--) {
+        if (y < 84) break;
+        ctx.fillStyle = color; ctx.fillText(lines[j], 30, y); y -= lh;
+      }
+      y -= 10;
+      if (y < 84) break;
+    }
+  });
+}
+function drawBanner() {
+  if (!bannerPanel) return;
+  bannerPanel.redraw((ctx, w, h) => {
+    frame(ctx, w, h, '#ff7a4d', '');
+    ctx.fillStyle = '#ffd9a8'; ctx.font = '700 34px Orbitron, monospace'; ctx.textAlign = 'center';
+    ctx.fillText('◆ ARMOUR ONLINE — 100%', w/2, h/2 + 12);
+    ctx.textAlign = 'left';
+  });
+}
+
+/* ---------- procedural textures ---------- */
+function makeTickTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const x = c.getContext('2d'); x.translate(256, 256);
+  x.strokeStyle = 'rgba(255,255,255,0.95)';
+  for (let i = 0; i < 72; i++) {
+    const a = i / 72 * Math.PI * 2, big = i % 6 === 0;
+    x.save(); x.rotate(a); x.lineWidth = big ? 6 : 2;
+    x.beginPath(); x.moveTo(big ? 192 : 208, 0); x.lineTo(228, 0); x.stroke(); x.restore();
+  }
+  x.lineWidth = 3;
+  x.beginPath(); x.arc(0, 0, 184, 0, Math.PI*2); x.stroke();
+  x.beginPath(); x.arc(0, 0, 236, 0, Math.PI*2); x.stroke();
+  return new THREE.CanvasTexture(c);
+}
+function makeGlowTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(128,128,0, 128,128,128);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+  return new THREE.CanvasTexture(c);
+}
+
+/* ---------- scene objects (module-level refs) ---------- */
+let reactor = null, coreHit = null, glow = null;
+const rings = [], tintMats = [];
+let dust = null, stars = null;
+const waveBars = [];
+let waveMat = null, shock = null, shake = 0;
+const camCalm = new THREE.Vector3(0, 0.7, 13.5), camCombat = new THREE.Vector3(0, 1.15, 9.6);
+
+function tinted(mat, kind) { tintMats.push({ m: mat, kind }); return mat; }
+
+function makeParticles(n, spread, size, color, opacity) {
+  const pos = new Float32Array(n*3), vel = new Float32Array(n*3);
+  for (let i = 0; i < n; i++) {
+    pos[i*3] = (Math.random()-0.5)*spread;
+    pos[i*3+1] = (Math.random()-0.5)*spread*0.7;
+    pos[i*3+2] = (Math.random()-0.5)*spread;
+    vel[i*3] = (Math.random()-0.5)*0.14; vel[i*3+1] = (Math.random()-0.5)*0.1; vel[i*3+2] = (Math.random()-0.5)*0.14;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const m = tinted(new THREE.PointsMaterial({ color, size, transparent: true, opacity,
+    blending: THREE.AdditiveBlending, depthWrite: false }), 'main');
+  const p = new THREE.Points(g, m);
+  p.userData = { vel, n, spread };
+  return p;
+}
+function updateParticles(p, dt, boost) {
+  const a = p.geometry.attributes.position, v = p.userData.vel, n = p.userData.n, s = p.userData.spread;
+  for (let i = 0; i < n; i++) {
+    let x = a.array[i*3] + v[i*3]*dt*boost,
+        y = a.array[i*3+1] + v[i*3+1]*dt*boost,
+        z = a.array[i*3+2] + v[i*3+2]*dt*boost;
+    if (x >  s/2) x = -s/2; else if (x < -s/2) x =  s/2;
+    if (y >  s*0.35) y = -s*0.35; else if (y < -s*0.35) y = s*0.35;
+    if (z >  s/2) z = -s/2; else if (z < -s/2) z =  s/2;
+    a.array[i*3] = x; a.array[i*3+1] = y; a.array[i*3+2] = z;
+  }
+  a.needsUpdate = true;
+}
+
+function makePanel(w, h, cw, ch) {
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+  const ctx = c.getContext('2d');
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4;
+  if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+  mesh.renderOrder = 5;
+  scene3.add(mesh);
+  const api = { mesh, redraw(draw) { draw(ctx, cw, ch); tex.needsUpdate = true; },
+                def: null, calmV: new THREE.Vector3(), combatV: new THREE.Vector3() };
+  panels.push(api);
+  return api;
+}
+
+const panelDefs = [
+  { key: 'clock',    w: 3.4, h: 1.15, cw: 512, ch: 176, calm: [-5.4,  3.5, -2.5], combat: [-3.3,  2.9, -0.6] },
+  { key: 'tele',     w: 3.4, h: 1.7,  cw: 512, ch: 256, calm: [-5.4,  1.45,-2.5], combat: [-3.3,  1.1, -0.6] },
+  { key: 'activity', w: 3.6, h: 2.35, cw: 512, ch: 340, calm: [ 5.4,  2.4, -2.5], combat: [ 3.3,  2.0, -0.6] },
+  { key: 'status',   w: 3.3, h: 0.95, cw: 512, ch: 144, calm: [-4.6, -3.1,  0.6], combat: [-2.9, -2.7,  1.2] },
+  { key: 'log',      w: 4.7, h: 5.0,  cw: 560, ch: 640, calm: [ 4.9, -1.7,  0.2], combat: [ 3.1, -1.5,  1.0] },
+  { key: 'banner',   w: 4.8, h: 0.85, cw: 640, ch: 110, calm: [ 0,    4.9, -1.2], combat: [ 0,    4.9, -1.2] },
+];
+
+function layoutPanels() {
+  const a = camera.aspect;
+  const spread = a < 0.85 ? 0.52 : 1;
+  const pscale = a < 0.85 ? 0.68 : 1;
+  camCalm.set(0, 0.7, a < 0.85 ? 16.8 : 13.5);
+  for (const p of panels) {
+    p.calmV.set(p.def.calm[0]*spread, p.def.calm[1], p.def.calm[2]);
+    p.combatV.set(p.def.combat[0]*spread, p.def.combat[1], p.def.combat[2]);
+    p.mesh.scale.setScalar(pscale);
+  }
+}
+
+function init3D() {
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setClearColor(0x010409, 1);
+  scene3 = new THREE.Scene();
+  scene3.fog = new THREE.FogExp2(0x010409, 0.02);
+  camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 140);
+  camera.position.copy(camCalm);
+
+  /* ----- arc reactor ----- */
+  reactor = new THREE.Group(); reactor.position.set(0, 0.4, 0); scene3.add(reactor);
+  const coreMesh = new THREE.Mesh(new THREE.SphereGeometry(0.55, 32, 32),
+    tinted(new THREE.MeshBasicMaterial({ color: 0xd8f4ff }), 'core'));
+  reactor.add(coreMesh);
+  const glowMat = tinted(new THREE.SpriteMaterial({ map: makeGlowTexture(), color: 0x46d8ff,
+    transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }), 'main');
+  glow = new THREE.Sprite(glowMat); glow.scale.set(4.4, 4.4, 1); reactor.add(glow);
+  const tickTex = makeTickTexture();
+  [[1.02, 1.3, 0.5, 1], [1.48, 1.7, -0.34, 1], [1.92, 2.08, 0.22, -1]].forEach(([ri, ro, sp, dir]) => {
+    const mesh = new THREE.Mesh(new THREE.RingGeometry(ri, ro, 72),
+      tinted(new THREE.MeshBasicMaterial({ map: tickTex, color: 0x46d8ff, transparent: true,
+        opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }), 'main'));
+    reactor.add(mesh); rings.push({ mesh, sp, dir });
+  });
+  [[2.32, 0.035, 0.15], [2.58, 0.02, -0.11]].forEach(([r, tube, sp], i) => {
+    const mesh = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 12, 100),
+      tinted(new THREE.MeshBasicMaterial({ color: 0x46d8ff, transparent: true, opacity: 0.5 }), 'main'));
+    mesh.rotation.x = Math.PI/2 + (i ? 0.28 : -0.22);
+    reactor.add(mesh); rings.push({ mesh, sp, dir: 1 });
+  });
+  coreHit = new THREE.Mesh(new THREE.SphereGeometry(1.2, 12, 12),
+    new THREE.MeshBasicMaterial({ visible: false }));
+  reactor.add(coreHit);
+
+  /* ----- particles ----- */
+  const dustN = isMobile ? Math.min(520, 130*hwCores) : Math.min(1100, 170*hwCores);
+  dust = makeParticles(dustN, 26, 0.07, 0x46d8ff, 0.75); scene3.add(dust);
+  stars = makeParticles(isMobile ? 260 : 520, 80, 0.14, 0x9fd8ff, 0.5); scene3.add(stars);
+
+  /* ----- 3D waveform arc above the reactor ----- */
+  {
+    const g = new THREE.BoxGeometry(0.1, 1, 0.1); g.translate(0, 0.5, 0);
+    waveMat = tinted(new THREE.MeshBasicMaterial({ color: 0x46d8ff, transparent: true, opacity: 0.9 }), 'main');
+    const R = 3.15;
+    for (let i = 0; i < 26; i++) {
+      const a = (-62 + i*(124/25)) * Math.PI/180;
+      const bar = new THREE.Mesh(g, waveMat);
+      bar.position.set(Math.sin(a)*R, 2.5, -Math.abs(Math.cos(a))*1.1 - 0.7);
+      bar.rotation.z = -a*0.5;
+      scene3.add(bar); waveBars.push(bar);
+    }
+  }
+
+  /* ----- holographic panels ----- */
+  for (const def of panelDefs) {
+    const api = makePanel(def.w, def.h, def.cw, def.ch);
+    api.def = def;
+    if (def.key === 'clock') clockPanel = api;
+    else if (def.key === 'tele') telePanel = api;
+    else if (def.key === 'activity') actPanel = api;
+    else if (def.key === 'status') statusPanel = api;
+    else if (def.key === 'log') logPanel = api;
+    else if (def.key === 'banner') bannerPanel = api;
+  }
+  layoutPanels();
+  drawClock(); drawTele(); drawActivity(); drawStatus(); drawLog(); drawBanner();
+  setInterval(drawClock, 1000);
+  if (document.fonts && document.fonts.ready)
+    document.fonts.ready.then(() => { drawClock(); drawTele(); drawActivity(); drawStatus(); drawLog(); drawBanner(); });
+
+  /* ----- long-press the 3D core → reopen uplink settings ----- */
+  const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+  let pressTimer = null, downXY = null;
+  canvas.addEventListener('pointerdown', (e) => {
+    downXY = [e.clientX, e.clientY];
+    ptr.x = (e.clientX/innerWidth)*2 - 1; ptr.y = -(e.clientY/innerHeight)*2 + 1;
+    ray.setFromCamera(ptr, camera);
+    if (ray.intersectObject(coreHit).length) {
+      clearTimeout(pressTimer);
+      pressTimer = setTimeout(showUplink, 800);
+    }
+  });
+  ['pointerup', 'pointercancel'].forEach(ev => canvas.addEventListener(ev, () => clearTimeout(pressTimer)));
+  canvas.addEventListener('pointermove', (e) => {
+    if (downXY && Math.hypot(e.clientX-downXY[0], e.clientY-downXY[1]) > 12) clearTimeout(pressTimer);
+  });
+
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    layoutPanels();
+  });
+
+  animate();
+}
+
+/* ---------- ARISE transformation machinery ---------- */
+function triggerShockwave() {
+  if (!threeOK) return;
+  if (shock) { scene3.remove(shock.mesh); shock.mesh.geometry.dispose(); shock.mesh.material.dispose(); }
+  const mesh = new THREE.Mesh(new THREE.RingGeometry(1.7, 1.85, 72),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+  mesh.position.copy(reactor.position);
+  mesh.rotation.x = -Math.PI/2 + 0.3;
+  scene3.add(mesh);
+  shock = { mesh, t: 0 };
+  if (!reducedMotion) shake = 1;
+}
+
+/* tasteful rising power tone (WebAudio, created on the boot tap gesture) */
+let actx = null;
+function ensureAudio() {
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (actx && actx.state === 'suspended') actx.resume();
+}
+function powerTone(up) {
+  if (!actx || reducedMotion) return;
+  try {
+    const o = actx.createOscillator(), g = actx.createGain();
+    const t0 = actx.currentTime;
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(up ? 150 : 680, t0);
+    o.frequency.exponentialRampToValueAtTime(up ? 700 : 140, t0 + 1.3);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.045, t0 + 0.3);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.5);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t0); o.stop(t0 + 1.6);
+  } catch (e) {}
+}
+
+/* ---------- render loop (pauses when tab hidden) ---------- */
+const clock3 = { last: 0, elapsed: 0 };
+let rafId = null, running3d = false;
+function faceCameraYaw(mesh) {
+  mesh.rotation.y = Math.atan2(camera.position.x - mesh.position.x, camera.position.z - mesh.position.z);
+}
+function animate() {
+  if (!running3d) return;
+  rafId = requestAnimationFrame(animate);
+  const now = performance.now();
+  const dt = Math.min((now - (clock3.last || now)) / 1000, 0.05);
+  clock3.last = now; clock3.elapsed += dt;
+  const t = clock3.elapsed;
+
+  ariseT += (ariseTarget - ariseT) * Math.min(1, dt * 2.4);
+  if (Math.abs(ariseTarget - ariseT) < 0.002) ariseT = ariseTarget;
+  const e = easeInOut(ariseT);
+  const sBoost = reducedMotion ? 0.12 : 1;
+
+  /* camera: push-in + FOV punch on ARISE */
+  camera.position.lerpVectors(camCalm, camCombat, e);
+  if (shake > 0.004 && !reducedMotion) {
+    camera.position.x += (Math.random()-0.5) * 0.24 * shake;
+    camera.position.y += (Math.random()-0.5) * 0.24 * shake;
+    shake *= Math.pow(0.015, dt);
+  }
+  camera.lookAt(0, 0.5, 0);
+  const fov = 55 + e * 11;
+  if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
+
+  /* palette shift cyan → red/orange */
+  for (const tm of tintMats) {
+    if (tm.kind === 'main') mixMain(tm.m.color);
+    else tm.m.color.copy(COL.calmCore).lerp(COL.ariseCore, ariseT);
+  }
+
+  /* reactor: idle breathing + ARISE spin-up */
+  const breathe = reducedMotion ? 0 : Math.sin(t*1.4)*0.03 + ariseT*Math.sin(t*7)*0.025;
+  reactor.scale.setScalar(1 + breathe);
+  const gs = 4.4 * (1 + ariseT*0.95 + breathe*2);
+  glow.scale.set(gs, gs, 1);
+  glow.material.opacity = 0.8 + ariseT*0.2;
+  for (const r of rings) r.mesh.rotation.z += r.sp * r.dir * dt * (1 + ariseT*5.5) * sBoost;
+
+  /* particles drift + ARISE burst */
+  updateParticles(dust, dt, (1 + ariseT*3.2) * sBoost);
+  updateParticles(stars, dt * 0.25, 1);
+  dust.material.size = 0.07 + ariseT*0.05;
+
+  /* waveform arc */
+  const bcls = document.body.classList;
+  const lvl = bcls.contains('listening') ? 1 : bcls.contains('talking') ? 0.85 : bcls.contains('awake') ? 0.5 : 0.28;
+  const wspd = (bcls.contains('listening') || bcls.contains('talking')) ? 9 : 2.5;
+  waveBars.forEach((bar, i) => {
+    bar.scale.y = Math.max(0.12, 0.22 + lvl*(0.55 + 0.45*Math.sin(t*wspd + i*0.7)) * (1.15 + ariseT*0.9));
+  });
+  if (bcls.contains('listening')) waveMat.color.copy(COL.amber); else mixMain(waveMat.color);
+
+  /* panels: calm ↔ combat layout + yaw billboard */
+  for (const p of panels) {
+    p.mesh.position.lerpVectors(p.calmV, p.combatV, e);
+    faceCameraYaw(p.mesh);
+  }
+  if (bannerPanel) {
+    bannerPanel.mesh.visible = ariseT > 0.03;
+    if (bannerPanel.mesh.visible)
+      bannerPanel.mesh.material.opacity = 0.72 + 0.28*Math.sin(t*6);
+  }
+
+  /* shockwave ring */
+  if (shock) {
+    shock.t += dt;
+    const st = shock.t / 0.9;
+    shock.mesh.scale.setScalar(1 + shock.t*9);
+    shock.mesh.material.opacity = Math.max(0, 0.85*(1 - st));
+    if (st >= 1) { scene3.remove(shock.mesh); shock.mesh.geometry.dispose(); shock.mesh.material.dispose(); shock = null; }
+  }
+
+  renderer.render(scene3, camera);
+}
+document.addEventListener('visibilitychange', () => {
+  if (!threeOK) return;
+  if (document.hidden) { running3d = false; if (rafId) cancelAnimationFrame(rafId); rafId = null; }
+  else if (!rafId) { running3d = true; clock3.last = performance.now(); animate(); }
+});
+
+if (threeOK) { running3d = true; init3D(); }
+
 /* ---------- BOOT ---------- */
 const bootLines = [
   '> Initializing J.A.R.V.I.S. ...',
   '> Neural network ............ <span class="ok">ONLINE</span>',
   '> Voice synthesis ........... <span class="ok">ONLINE</span>',
   '> Arc reactor ............... <span class="ok">100%</span>',
+  '> Holographic matrix ........ <span class="ok">ONLINE</span>',
   '> All systems nominal.'
 ];
 function bootGreeting() {
@@ -657,7 +964,8 @@ window.addEventListener('load', () => {
   const wake = () => {
     boot.removeEventListener('pointerdown', wake);
     boot.classList.add('done');
-    if (getUplink()) speak(bootGreeting()); // inside the tap gesture: voice is allowed everywhere
+    ensureAudio(); // unlock WebAudio inside the tap gesture
+    if (getUplink()) speak(bootGreeting());
     else { showUplink(); speak('Secure uplink not configured, sir. Enter the backend details to bring me fully online.'); }
   };
   boot.addEventListener('pointerdown', wake);
