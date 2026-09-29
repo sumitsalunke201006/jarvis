@@ -335,7 +335,7 @@ document.getElementById('upTest').addEventListener('click', async () => {
 });
 
 /* ---------- BRAIN: neural core (backend) ---------- */
-let convoHistory = []; // last 10 exchanges, kept client-side only
+let convoHistory = []; // last 5 exchanges (10 entries), kept client-side only
 let lastBrainReply = ''; // last spoken answer — used by "save that in ... notebook"
 async function askBrain(raw) {
   const cfg = getUplink();
@@ -348,7 +348,7 @@ async function askBrain(raw) {
       method: 'POST',
       signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json', 'x-jarvis-key': cfg.key },
-      body: JSON.stringify({ message: raw, history: convoHistory.slice(-20), armour: armourMode })
+      body: JSON.stringify({ message: raw, history: convoHistory.slice(-10), armour: armourMode })
     });
     clearTimeout(to);
     const qRem = res.headers.get('X-RateLimit-Remaining');
@@ -365,7 +365,7 @@ async function askBrain(raw) {
     if (data && data.notebook) openNotebookPanel(data.notebook);
     convoHistory.push({ role: 'user', content: raw.slice(0, 500) });
     convoHistory.push({ role: 'assistant', content: reply.slice(0, 500) });
-    while (convoHistory.length > 20) convoHistory.shift();
+    while (convoHistory.length > 10) convoHistory.shift();
     speak(reply);
   } catch (e) {
     if (e && e.name === 'AbortError') {
