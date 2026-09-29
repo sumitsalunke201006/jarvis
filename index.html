@@ -55,6 +55,11 @@
   #boot.done { opacity: 0; pointer-events: none; }
   #bootlines { font-size: .8rem; line-height: 2; min-height: 200px; width: 100%; max-width: 420px; }
   #bootlines .ok { color: #7dffb2; }
+  #bootTap { display: none; margin-top: 28px; font-family: 'Orbitron', sans-serif; font-size: .78rem;
+    letter-spacing: 4px; color: var(--amber); text-shadow: 0 0 12px var(--amber); cursor: pointer;
+    animation: blink 1.2s ease-in-out infinite; }
+  #bootTap.show { display: block; }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
 
   /* ---------- HEADER ---------- */
   header { text-align: center; margin: 10px 0 4px; z-index: 2; }
@@ -181,7 +186,7 @@
 <div id="scan"></div>
 
 <!-- BOOT SEQUENCE -->
-<div id="boot"><div id="bootlines"></div></div>
+<div id="boot"><div id="bootlines"></div><div id="bootTap">▸ TAP TO WAKE JARVIS</div></div>
 
 <header>
   <h1>JARVIS</h1>
@@ -282,7 +287,6 @@ function pickVoice() {
 function speak(text) {
   addLog('jarvis', text);
   try {
-    speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 0.95; u.pitch = 0.75; u.lang = 'en-US'; // deeper, calmer delivery
     const v = pickVoice(); if (v) u.voice = v;
@@ -293,8 +297,18 @@ function speak(text) {
       else setStatus('STANDBY');
     };
     u.onend = u.onerror = endSpeech;
-    speechSynthesis.speak(u);
-  } catch (e) { setStatus('STANDBY'); }
+    // iOS Safari goes silent if cancel() and speak() run back-to-back while idle.
+    // Only cancel when something is actually speaking, then give it a breath.
+    if (speechSynthesis.speaking) {
+      speechSynthesis.cancel();
+      setTimeout(() => speechSynthesis.speak(u), 150);
+    } else {
+      speechSynthesis.speak(u);
+    }
+  } catch (e) {
+    document.body.classList.remove('talking');
+    setStatus(wakeModeOn() ? (isAwake() ? 'AWAKE — SPEAK NOW' : 'DORMANT — SAY "JARVIS"') : 'STANDBY');
+  }
 }
 if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => {};
 
@@ -508,27 +522,25 @@ function bootGreeting() {
 }
 window.addEventListener('load', () => {
   const box = document.getElementById('bootlines');
+  const boot = document.getElementById('boot');
+  const tap = document.getElementById('bootTap');
   let i = 0;
   const tick = () => {
     if (i < bootLines.length) {
       const d = document.createElement('div'); d.innerHTML = bootLines[i++]; box.appendChild(d);
       setTimeout(tick, 420);
     } else {
-      setTimeout(() => {
-        document.getElementById('boot').classList.add('done');
-        addLog('jarvis', bootGreeting() + ' (Tap anywhere once to wake my voice.)');
-      }, 600);
+      tap.classList.add('show'); // gate: voice unlocks on this tap, on every platform
     }
   };
+  const wake = () => {
+    boot.removeEventListener('pointerdown', wake);
+    boot.classList.add('done');
+    speak(bootGreeting()); // inside the tap gesture: voice is allowed everywhere
+  };
+  boot.addEventListener('pointerdown', wake);
   tick();
 });
-// iPhone: voice unlocks on first tap
-window.addEventListener('pointerdown', function wake(e) {
-  if (e.target.closest && e.target.closest('#mic')) return;
-  try { speechSynthesis.cancel(); } catch (err) {}
-  if (!document.getElementById('boot').classList.contains('done')) return;
-  speak(bootGreeting());
-}, { once: true });
 </script>
 </body>
 </html>
