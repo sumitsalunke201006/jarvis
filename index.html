@@ -622,8 +622,8 @@ function drawLog() {
   const col = css(mixMain(_c1));
   logPanel.redraw((ctx, w, h) => {
     frame(ctx, w, h, col, 'COMMS LOG');
-    ctx.font = '21px "Share Tech Mono", monospace';
-    const lh = 27;
+    ctx.font = '24px "Share Tech Mono", monospace';
+    const lh = 31;
     let y = h - 26;
     for (let i = logEntries.length - 1; i >= 0; i--) {
       const e = logEntries[i];
@@ -734,7 +734,7 @@ const panelDefs = [
   { key: 'tele',     w: 3.4, h: 1.7,  cw: 512, ch: 256, calm: [-5.4,  1.45,-2.5], combat: [-3.3,  1.1, -0.6] },
   { key: 'activity', w: 3.6, h: 2.35, cw: 512, ch: 340, calm: [ 5.4,  2.4, -2.5], combat: [ 3.3,  2.0, -0.6] },
   { key: 'status',   w: 3.3, h: 0.95, cw: 512, ch: 144, calm: [-4.6, -3.1,  0.6], combat: [-2.9, -2.7,  1.2] },
-  { key: 'log',      w: 4.7, h: 5.0,  cw: 560, ch: 640, calm: [ 4.9, -1.7,  0.2], combat: [ 3.1, -1.5,  1.0] },
+  { key: 'log',      w: 5.6, h: 6.0,  cw: 660, ch: 720, calm: [ 4.9, -1.7,  0.2], combat: [ 3.1, -1.5,  1.0] },
   { key: 'banner',   w: 4.8, h: 0.85, cw: 640, ch: 110, calm: [ 0,    4.9, -1.2], combat: [ 0,    4.9, -1.2] },
 ];
 
