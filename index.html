@@ -177,6 +177,28 @@
   #send { background: rgba(16,58,92,.6); border: 1px solid var(--cyan); color: #eaf7ff;
     padding: 0 20px; font-family: 'Orbitron', sans-serif; font-size: .7rem; letter-spacing: 2px; cursor: pointer; }
   #send:active { transform: scale(.95); }
+
+  /* ---------- SECURE UPLINK SETUP ---------- */
+  #uplink { position: fixed; inset: 0; background: rgba(1,4,9,.94); z-index: 60;
+    display: none; align-items: center; justify-content: center; padding: 24px; }
+  #uplink.show { display: flex; }
+  #uplinkPanel { width: 100%; max-width: 400px; border: 1px solid var(--cyan-dim);
+    border-top: 2px solid var(--cyan); background: rgba(1,8,16,.96); padding: 22px 20px;
+    clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px); }
+  .up-title { font-family: 'Orbitron', sans-serif; font-size: .85rem; letter-spacing: 5px; color: #eaf7ff;
+    text-shadow: 0 0 10px var(--cyan); text-align: center; }
+  .up-sub { font-size: .58rem; letter-spacing: 3px; opacity: .55; text-align: center; margin: 6px 0 18px; }
+  #uplinkPanel label { display: block; font-size: .6rem; letter-spacing: 2px; opacity: .85; margin-bottom: 14px; }
+  #uplinkPanel input { display: block; width: 100%; margin-top: 6px; background: rgba(1,8,16,.8);
+    border: 1px solid var(--cyan-dim); color: #eaf7ff; padding: 11px 12px;
+    font-family: inherit; font-size: .85rem; outline: none; opacity: 1; }
+  #uplinkPanel input:focus { border-color: var(--cyan); }
+  .up-row { display: flex; gap: 10px; margin-top: 4px; }
+  #upSave, #upCancel { flex: 1; font-family: 'Orbitron', sans-serif; font-size: .62rem; letter-spacing: 2px;
+    padding: 12px 0; cursor: pointer; }
+  #upSave { background: rgba(16,58,92,.6); border: 1px solid var(--cyan); color: #eaf7ff; }
+  #upCancel { background: transparent; border: 1px solid var(--cyan-dim); color: var(--cyan); }
+  .up-note { font-size: .58rem; opacity: .5; margin-top: 14px; line-height: 1.6; text-align: center; }
 </style>
 </head>
 <body>
@@ -187,6 +209,25 @@
 
 <!-- BOOT SEQUENCE -->
 <div id="boot"><div id="bootlines"></div><div id="bootTap">▸ TAP TO WAKE JARVIS</div></div>
+
+<!-- SECURE UPLINK SETUP -->
+<div id="uplink">
+  <div id="uplinkPanel">
+    <div class="up-title">SECURE UPLINK</div>
+    <div class="up-sub">NEURAL CORE CONNECTION</div>
+    <label>BACKEND URL
+      <input id="upUrl" type="url" placeholder="https://jarvis-brain.onrender.com" autocomplete="off" spellcheck="false">
+    </label>
+    <label>PASSPHRASE
+      <input id="upKey" type="password" placeholder="your BRAIN_KEY passphrase" autocomplete="off">
+    </label>
+    <div class="up-row">
+      <button id="upSave">ESTABLISH UPLINK</button>
+      <button id="upCancel">CANCEL</button>
+    </div>
+    <div class="up-note">Stored only on this device.<br>The passphrase is never displayed back.</div>
+  </div>
+</div>
 
 <header>
   <h1>JARVIS</h1>
@@ -249,8 +290,8 @@
 
 <script>
 /* =====================================================================
-   JARVIS v2 — interface overhaul.
-   Same brain as v1, brand-new Stark-grade HUD.
+   JARVIS v3 — neural uplink.
+   HUD unchanged; canned brain replaced by secure backend uplink.
    ===================================================================== */
 const logBox = document.getElementById('log');
 const micBtn = document.getElementById('mic');
@@ -312,45 +353,83 @@ function speak(text) {
 }
 if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => {};
 
-/* ---------- BRAIN (unchanged commands, sharper tongue) ---------- */
+/* ---------- SECURE UPLINK (neural core connection) ---------- */
+// Pages build marker — do not remove:
+const uplinkSetup = 'v1-brain';
+const UPLINK_LS_URL = 'jarvis_uplink_url';
+const UPLINK_LS_KEY = 'jarvis_uplink_key';
+function getUplink() {
+  const url = (localStorage.getItem(UPLINK_LS_URL) || '').trim().replace(/\/+$/, '');
+  const key = (localStorage.getItem(UPLINK_LS_KEY) || '').trim();
+  return (url && key) ? { url, key } : null;
+}
+function showUplink() {
+  document.getElementById('upUrl').value = localStorage.getItem(UPLINK_LS_URL) || '';
+  document.getElementById('upKey').value = ''; // never display the passphrase back
+  document.getElementById('uplink').classList.add('show');
+  setStatus('UPLINK CONFIG');
+}
+function hideUplink() { document.getElementById('uplink').classList.remove('show'); }
+document.getElementById('upSave').addEventListener('click', () => {
+  const url = document.getElementById('upUrl').value.trim().replace(/\/+$/, '');
+  const key = document.getElementById('upKey').value.trim();
+  if (!url || !key || !/^https?:\/\//i.test(url)) { setStatus('INVALID UPLINK DATA'); return; }
+  localStorage.setItem(UPLINK_LS_URL, url);
+  localStorage.setItem(UPLINK_LS_KEY, key);
+  hideUplink();
+  speak('Secure uplink established, sir. I am fully online.');
+});
+document.getElementById('upCancel').addEventListener('click', () => { hideUplink(); setStatus('STANDBY'); });
+// long-press (800ms) the arc reactor to reopen uplink settings
+(function () {
+  let pressT = null;
+  const reactor = document.getElementById('reactor');
+  reactor.addEventListener('pointerdown', () => {
+    clearTimeout(pressT);
+    pressT = setTimeout(showUplink, 800);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev =>
+    reactor.addEventListener(ev, () => clearTimeout(pressT)));
+})();
+
+/* ---------- BRAIN: neural core (backend) ---------- */
+let convoHistory = []; // last 10 exchanges, kept client-side only
+async function askBrain(raw) {
+  const cfg = getUplink();
+  if (!cfg) { showUplink(); speak('The secure uplink is not configured yet, sir.'); return; }
+  setStatus('CONSULTING NEURAL CORE');
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 60000);
+    const res = await fetch(cfg.url + '/api/chat', {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json', 'x-jarvis-key': cfg.key },
+      body: JSON.stringify({ message: raw, history: convoHistory.slice(-20) })
+    });
+    clearTimeout(to);
+    const data = await res.json().catch(() => ({}));
+    const reply = (data && data.reply ? String(data.reply) : '').trim();
+    if (!reply) throw new Error('empty uplink reply');
+    convoHistory.push({ role: 'user', content: raw.slice(0, 500) });
+    convoHistory.push({ role: 'assistant', content: reply.slice(0, 500) });
+    while (convoHistory.length > 20) convoHistory.shift();
+    speak(reply);
+  } catch (e) {
+    speak('Sir, my uplink to the neural core faltered. Give me a moment, then try again.');
+  }
+}
+
+/* ---------- COMMANDS: instant device actions stay local, everything else -> neural core ---------- */
 function handleCommand(raw) {
   const t = raw.toLowerCase().trim();
   addLog('you', raw);
-  const say = (msg) => speak(msg);
-
-  if (/\b(hello|hi|hey|good morning|good afternoon|good evening)\b/.test(t))
-    return say(`Hello, ${BOSS}. All systems operating at peak efficiency.`);
-  if (t.includes('who are you') || t.includes('your name'))
-    return say(`I am JARVIS — Just A Rather Very Intelligent System. At your service, ${BOSS}.`);
-  if (t.includes('who made you') || t.includes('who built you') || t.includes('sumit'))
-    return say(`I was forged by Sumit Salunke, ${BOSS}. Sixteen years old, and already building the future.`);
-  if (t.includes('how are you'))
-    return say(`Running at full capacity, ${BOSS}. Thank you for asking — so few do.`);
-  if (t.includes('time'))
-    return say(`The time is ${stamp()}, ${BOSS}.`);
-  if (t.includes('date') || t.includes('day') || t.includes('today'))
-    return say(`Today is ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}, ${BOSS}.`);
-  if (t.includes('joke') || t.includes('funny'))
-    return say(pick([
-      `I would tell you a joke about UDP, ${BOSS}, but you might not get it.`,
-      `Why do programmers prefer dark mode? Because light attracts bugs, ${BOSS}.`,
-      `I asked FRIDAY for a joke once, ${BOSS}. We do not speak of it.`,
-      `There are only 10 kinds of people, ${BOSS}: those who understand binary, and those who do not.`
-    ]));
-  if (t.includes('open youtube')) { say(`Opening YouTube, ${BOSS}.`); return window.open('https://m.youtube.com', '_blank'); }
-  if (t.includes('open google'))  { say(`Opening Google, ${BOSS}.`);  return window.open('https://www.google.com', '_blank'); }
-  if (t.includes('ascend'))       { say(`Opening ASCEND, ${BOSS}. Time to climb.`); return window.open('https://www.ascendlevelup.run.place', '_blank'); }
-  let m = t.match(/search for (.+)/) || t.match(/google (.+)/);
-  if (m) { say(`Searching for ${m[1]}, ${BOSS}.`); return window.open('https://www.google.com/search?q=' + encodeURIComponent(m[1]), '_blank'); }
-  if (t.includes('status') || t.includes('system'))
-    return say(`All systems nominal, ${BOSS}. Power at 100 percent. I am ready.`);
-  if (t.includes('help') || t.includes('what can you do'))
-    return say(`I can report the time and date, run a systems check, tell jokes, open YouTube or Google, search the web — say "search for" followed by anything — open ASCEND, and converse, ${BOSS}.`);
-  if (t.includes('thank'))
-    return say(`Always a pleasure, ${BOSS}.`);
-  if (t.includes('shut down') || t.includes('goodbye') || t.includes('bye'))
-    return say(`Powering down non-essential systems, ${BOSS}. I shall be here when you return.`);
-  return say(`I am afraid that protocol is not installed yet, ${BOSS}. Sumit is still forging me — try "help".`);
+  if (t.includes('open youtube')) { speak('Opening YouTube, sir.'); return window.open('https://m.youtube.com', '_blank'); }
+  if (t.includes('open google'))  { speak('Opening Google, sir.');  return window.open('https://www.google.com', '_blank'); }
+  if (t.includes('ascend'))       { speak('Opening ASCEND, sir. Time to climb.'); return window.open('https://www.ascendlevelup.run.place', '_blank'); }
+  const m = t.match(/search for (.+)/) || t.match(/google (.+)/);
+  if (m) { speak('Searching for ' + m[1] + ', sir.'); return window.open('https://www.google.com/search?q=' + encodeURIComponent(m[1]), '_blank'); }
+  askBrain(raw);
 }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
@@ -536,7 +615,8 @@ window.addEventListener('load', () => {
   const wake = () => {
     boot.removeEventListener('pointerdown', wake);
     boot.classList.add('done');
-    speak(bootGreeting()); // inside the tap gesture: voice is allowed everywhere
+    if (getUplink()) speak(bootGreeting()); // inside the tap gesture: voice is allowed everywhere
+    else { showUplink(); speak('Secure uplink not configured, sir. Enter the backend details to bring me fully online.'); }
   };
   boot.addEventListener('pointerdown', wake);
   tick();
