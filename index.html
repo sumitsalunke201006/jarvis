@@ -108,6 +108,39 @@
   .up-result.bad { color: #ff9a8a; }
   .up-note { font-size: .58rem; opacity: .5; margin-top: 14px; line-height: 1.6; text-align: center; }
 
+  /* ---------- NOTEBOOK PANEL (Stark HUD) ---------- */
+  #nbPanel { position: fixed; inset: 0; z-index: 55; display: flex; align-items: center; justify-content: center;
+    padding: 24px; background: rgba(1,4,9,.72); }
+  #nbPanel[hidden] { display: none; }
+  #nbInner { width: 100%; max-width: 430px; max-height: 70vh; display: flex; flex-direction: column;
+    border: 1px solid var(--cyan-dim); border-top: 2px solid var(--cyan);
+    background: rgba(1,10,20,.96); box-shadow: 0 0 40px rgba(70,216,255,.25), inset 0 0 60px rgba(70,216,255,.05);
+    clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
+    animation: nbIn .35s ease-out; }
+  @keyframes nbIn { from { transform: translateY(14px) scale(.97); opacity: 0; } }
+  .nb-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 10px; }
+  #nbTitle { font-family: 'Orbitron', sans-serif; font-size: .72rem; letter-spacing: 4px; color: #eaf7ff;
+    text-shadow: 0 0 12px var(--cyan); }
+  #nbClose { background: transparent; border: 1px solid var(--cyan-dim); color: var(--cyan);
+    width: 30px; height: 30px; cursor: pointer; font-size: .8rem; }
+  #nbNotes { overflow-y: auto; padding: 4px 18px 8px; display: flex; flex-direction: column; gap: 8px; }
+  .nb-note { display: flex; gap: 10px; font-size: .8rem; line-height: 1.5; color: #d7eefb;
+    border-left: 2px solid var(--cyan-dim); padding: 8px 10px; background: rgba(70,216,255,.05); }
+  .nb-idx { color: var(--cyan); font-family: 'Orbitron', sans-serif; font-size: .68rem; padding-top: 2px; }
+  .nb-empty { font-size: .78rem; opacity: .6; padding: 12px 4px; font-style: italic; }
+  #nbFoot { padding: 10px 18px 14px; font-size: .58rem; letter-spacing: 3px; opacity: .5; }
+  /* ---------- REMINDER BANNER ---------- */
+  #remBanner { position: fixed; top: 12vh; left: 50%; transform: translateX(-50%); z-index: 70;
+    width: min(92vw, 420px); text-align: center; border: 1px solid var(--amber); border-top: 2px solid var(--amber);
+    background: rgba(20,12,2,.97); padding: 18px; box-shadow: 0 0 34px rgba(255,200,87,.35);
+    animation: remPulse 1.2s ease-in-out infinite; }
+  #remBanner[hidden] { display: none; }
+  @keyframes remPulse { 50% { box-shadow: 0 0 60px rgba(255,200,87,.6); } }
+  .rem-title { font-family: 'Orbitron', sans-serif; letter-spacing: 5px; font-size: .8rem; color: var(--amber); }
+  #remText { margin: 10px 0 14px; font-size: .9rem; color: #ffe9c4; }
+  #remDismiss { font-family: 'Orbitron', sans-serif; font-size: .6rem; letter-spacing: 2px; padding: 10px 26px;
+    background: transparent; border: 1px solid var(--amber); color: var(--amber); cursor: pointer; }
+
   #glfail { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center;
     background: #010409; color: var(--cyan); padding: 30px; text-align: center; font-size: .8rem; line-height: 2; }
 </style>
@@ -162,6 +195,22 @@
     <button id="send">SEND</button>
   </div>
   <div id="dockhint">LONG-PRESS CORE · UPLINK</div>
+</div>
+
+<!-- NOTEBOOK PANEL -->
+<div id="nbPanel" hidden>
+  <div id="nbInner">
+    <div class="nb-head"><span id="nbTitle">NOTEBOOK</span><button id="nbClose" aria-label="Close notebook">✕</button></div>
+    <div id="nbNotes"></div>
+    <div id="nbFoot"></div>
+  </div>
+</div>
+
+<!-- REMINDER BANNER -->
+<div id="remBanner" hidden>
+  <div class="rem-title">⏰ REMINDER</div>
+  <div id="remText"></div>
+  <button id="remDismiss">DISMISS</button>
 </div>
 
 <div id="glfail"><div>3D SYSTEMS OFFLINE<br><span style="opacity:.6">This browser could not start WebGL.<br>Voice and uplink still work below.</span></div></div>
@@ -287,6 +336,7 @@ document.getElementById('upTest').addEventListener('click', async () => {
 
 /* ---------- BRAIN: neural core (backend) ---------- */
 let convoHistory = []; // last 10 exchanges, kept client-side only
+let lastBrainReply = ''; // last spoken answer — used by "save that in ... notebook"
 async function askBrain(raw) {
   const cfg = getUplink();
   if (!cfg) { showUplink(); speak('The secure uplink is not configured yet, sir.'); return; }
@@ -311,6 +361,8 @@ async function askBrain(raw) {
     const data = await res.json().catch(() => ({}));
     const reply = (data && data.reply ? String(data.reply) : '').trim();
     if (!reply) throw new Error('empty uplink reply');
+    lastBrainReply = reply;
+    if (data && data.notebook) openNotebookPanel(data.notebook);
     convoHistory.push({ role: 'user', content: raw.slice(0, 500) });
     convoHistory.push({ role: 'assistant', content: reply.slice(0, 500) });
     while (convoHistory.length > 20) convoHistory.shift();
@@ -352,6 +404,51 @@ function handleCommand(raw) {
     else speak('Armour is already offline, sir.');
     return;
   }
+  if (t === 'close notebook' || t === 'close the notebook') {
+    const p = document.getElementById('nbPanel');
+    if (p && !p.hidden) { closeNotebookPanel(); speak('Notebook closed, sir.'); }
+    else speak('No notebook is open, sir.');
+    return;
+  }
+  const saveThat = t.match(/^save that in (?:my )?(.+?)(?: notebook)?$/);
+  if (saveThat) {
+    if (!lastBrainReply) { speak('There is nothing to save yet, sir — ask me something first.'); return; }
+    askBrain('save ' + lastBrainReply.slice(0, 800) + ' in ' + saveThat[1].trim() + ' notebook');
+    return;
+  }
+  /* reminders & alarms — local timers, cost no quota */
+  const mT = t.match(/^(?:please\s+)?set (?:a )?timer for\s+(.+?)\s+(seconds?|minutes?|hours?)$/)
+          || t.match(/^(?:please\s+)?remind me in\s+(.+?)\s+(seconds?|minutes?|hours?)(?:\s+to\s+(.+))?$/);
+  if (mT) {
+    const n = wordsToNum(mT[1]); const unit = mT[2]; const what = (mT[3] || 'your timer').trim();
+    if (!n || n <= 0 || n > 1440) { speak('I did not catch the time, sir — say it like "remind me in twenty minutes".'); return; }
+    const ms = n * (unit[0] === 'h' ? 3600000 : unit[0] === 's' ? 1000 : 60000);
+    addReminder(Date.now() + ms, what);
+    speak('Consider it done, sir — ' + what + ', in ' + mT[1].trim() + ' ' + unit + '.');
+    return;
+  }
+  const mA = t.match(/^(?:please\s+)?(?:set an alarm for|wake me(?: up)? at|remind me at)\s+(.+?)(?:\s+to\s+(.+))?$/);
+  if (mA) {
+    const at = parseAlarmTime(mA[1]);
+    if (!at) { speak('I did not catch the time, sir — say it like "set an alarm for six thirty AM".'); return; }
+    if (at.getTime() - Date.now() > 24 * 3600000) { speak('That is more than a day away, sir — beyond what I can watch.'); return; }
+    const what = (mA[2] || 'your alarm').trim();
+    addReminder(at.getTime(), what);
+    speak('Alarm set for ' + fmtClock(at) + ', sir — ' + what + '. Keep this page open and I will wake you.');
+    return;
+  }
+  if (/^(?:please\s+)?(?:list|show)(?: my)? (?:reminders?|alarms?)$/.test(t)) {
+    if (!reminders.length) speak('No reminders set, sir.');
+    else speak('You have ' + reminders.length + ' reminder' + (reminders.length > 1 ? 's' : '') + ', sir: ' +
+      reminders.map(r => r.text + ' at ' + fmtClock(new Date(r.fireAt))).join('; ') + '.');
+    return;
+  }
+  if (/^(?:please\s+)?cancel (?:all )?(?:my )?(?:reminders?|alarms?)$/.test(t)) {
+    reminders.forEach(r => clearTimeout(r.timer));
+    reminders = []; persistReminders();
+    speak('All reminders cancelled, sir.');
+    return;
+  }
   if (/how much time|how many (questions|requests)|my limit|uplink status|quota|time do i have|requests (left|remaining)/.test(t)) {
     if (quota.remaining === null) { speak('I have not consulted the neural core yet, sir. Ask me something first.'); }
     else {
@@ -368,6 +465,100 @@ function handleCommand(raw) {
   askBrain(raw);
 }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+/* ---------- NOTEBOOK PANEL ---------- */
+let nbTimer = null;
+function openNotebookPanel(nb) {
+  const p = document.getElementById('nbPanel');
+  document.getElementById('nbTitle').textContent = 'NOTEBOOK — ' + String(nb.name || '').toUpperCase();
+  const box = document.getElementById('nbNotes');
+  box.textContent = '';
+  const notes = Array.isArray(nb.notes) ? nb.notes : [];
+  if (!notes.length) {
+    const e = document.createElement('div'); e.className = 'nb-empty';
+    e.textContent = 'Empty, sir — tell me what to note down.'; box.appendChild(e);
+  } else notes.forEach((n, i) => {
+    const d = document.createElement('div'); d.className = 'nb-note';
+    const idx = document.createElement('span'); idx.className = 'nb-idx'; idx.textContent = (i + 1) + '.';
+    const tx = document.createElement('span'); tx.textContent = n.note;
+    d.appendChild(idx); d.appendChild(tx); box.appendChild(d);
+  });
+  document.getElementById('nbFoot').textContent = notes.length + (notes.length === 1 ? ' NOTE' : ' NOTES');
+  p.hidden = false;
+  clearTimeout(nbTimer);
+  if (nb.autoClose) nbTimer = setTimeout(closeNotebookPanel, 4000); // flourish on make, then away
+}
+function closeNotebookPanel() { clearTimeout(nbTimer); document.getElementById('nbPanel').hidden = true; }
+document.getElementById('nbClose').addEventListener('click', closeNotebookPanel);
+
+/* ---------- REMINDERS & ALARMS (local timers — the page must stay open) ---------- */
+const REM_LS = 'jarvis-reminders-v1';
+let reminders = [];
+const NUMW = { zero:0, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10,
+  eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19,
+  twenty:20, thirty:30, forty:40, fifty:50, sixty:60 };
+function wordsToNum(s) {
+  s = String(s || '').trim().toLowerCase();
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  if (s === 'a' || s === 'an') return 1;
+  let n = 0;
+  for (const p of s.split(/[\s-]+/)) { if (NUMW[p] === undefined) return null; n += NUMW[p]; }
+  return n > 0 ? n : null;
+}
+const fmtClock = (d) => d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+function persistReminders() {
+  try { localStorage.setItem(REM_LS, JSON.stringify(reminders.map(r => ({ id: r.id, fireAt: r.fireAt, text: r.text })))); } catch (e) {}
+}
+function armReminder(r) {
+  clearTimeout(r.timer);
+  r.timer = setTimeout(() => fireReminder(r.id), Math.max(0, r.fireAt - Date.now()));
+}
+function addReminder(fireAt, text) {
+  const r = { id: 'r' + Date.now().toString(36) + Math.floor(Math.random() * 1e4), fireAt, text: String(text).slice(0, 200) };
+  reminders.push(r); armReminder(r); persistReminders();
+  return r;
+}
+function fireReminder(id) {
+  const i = reminders.findIndex(r => r.id === id);
+  if (i < 0) return;
+  const r = reminders.splice(i, 1)[0];
+  persistReminders();
+  document.getElementById('remText').textContent = r.text;
+  document.getElementById('remBanner').hidden = false;
+  speak('Sir — a reminder. ' + r.text);
+}
+function parseAlarmTime(s) {
+  const m = String(s || '').trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10); const min = m[2] ? parseInt(m[2], 10) : 0;
+  if (min > 59) return null;
+  const ap = m[3];
+  if (ap) {
+    if (h < 1 || h > 12) return null;
+    if (ap === 'pm' && h < 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+    const d = new Date(); d.setHours(h, min, 0, 0);
+    if (d <= new Date()) d.setDate(d.getDate() + 1);
+    return d;
+  }
+  if (h > 23) return null;
+  const now = new Date(); // no am/pm: nearest future occurrence (h>12 is unambiguous 24h time)
+  const hours = h > 12 ? [h] : [h, (h + 12) % 24];
+  const cands = hours.map(hh => { const d = new Date(now); d.setHours(hh, min, 0, 0); if (d <= now) d.setDate(d.getDate() + 1); return d; });
+  cands.sort((a, b) => a - b);
+  return cands[0];
+}
+function loadReminders() {
+  let arr = [];
+  try { arr = JSON.parse(localStorage.getItem(REM_LS) || '[]'); } catch (e) {}
+  const now = Date.now();
+  reminders = (Array.isArray(arr) ? arr : []).filter(r => r && r.fireAt > now - 60000)
+    .map(r => ({ id: String(r.id), fireAt: Number(r.fireAt), text: String(r.text || 'your reminder') }));
+  reminders.forEach(armReminder);
+  persistReminders();
+}
+document.getElementById('remDismiss').addEventListener('click', () => { document.getElementById('remBanner').hidden = true; });
+loadReminders();
 
 /* ---------- EARS (patient: waits through thinking pauses) ---------- */
 const EAR_SILENCE_MS = 2500; // answer only after 2.5s of true silence
