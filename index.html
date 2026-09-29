@@ -137,7 +137,8 @@
 
   /* ---------- MIC ---------- */
   #micwrap { position: relative; margin: 16px 0 4px; z-index: 2; }
-  #mic { width: 88px; height: 88px; border-radius: 50%; font-size: 2.1rem; cursor: pointer;
+  #mic { width: 88px; height: 88px; border-radius: 50%; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
     background: radial-gradient(circle at 35% 30%, #103a5c, #04121f 75%);
     border: 2px solid var(--cyan); color: #eaf7ff;
     box-shadow: 0 0 24px rgba(70,216,255,.55), inset 0 0 18px rgba(70,216,255,.25); }
@@ -149,6 +150,19 @@
   #micwrap.listening .ripple { animation: rip 1.6s ease-out infinite; }
   #micwrap.listening .ripple.d2 { animation-delay: .8s; }
   @keyframes rip { 0% { transform: scale(1); opacity: .8; } 100% { transform: scale(1.9); opacity: 0; } }
+
+  /* ---------- WAKE WORD ---------- */
+  #wakechip { margin-top: 14px; font-family: 'Orbitron', sans-serif; font-size: .6rem; letter-spacing: 3px;
+    background: transparent; border: 1px solid var(--cyan-dim); color: var(--cyan);
+    padding: 11px 24px; cursor: pointer; z-index: 2;
+    clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+  #wakechip.armed { border-color: var(--amber); color: var(--amber);
+    box-shadow: 0 0 16px rgba(255,200,87,.45); }
+  body.wake-dormant .core { filter: saturate(.5) brightness(.8); }
+  body.awake .core { animation-duration: .55s; }
+  body.awake #reactor { filter: brightness(1.35); }
+  body.awake #wave span { background: var(--amber); box-shadow: 0 0 8px var(--amber);
+    animation: wv .55s ease-in-out infinite alternate; }
 
   #typerow { display: flex; width: 100%; max-width: 520px; margin-top: 12px; gap: 8px; z-index: 2; }
   #textIn { flex: 1; background: rgba(1,8,16,.8); border: 1px solid var(--cyan-dim);
@@ -211,8 +225,17 @@
 
 <div id="micwrap">
   <div class="ripple"></div><div class="ripple d2"></div>
-  <button id="mic" title="Talk to JARVIS">🎤</button>
+  <button id="mic" title="Talk to JARVIS">
+    <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+      <rect x="9" y="2.5" width="6" height="11" rx="3"/>
+      <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/>
+      <path d="M12 18v3.5"/>
+      <path d="M8.5 21.5h7"/>
+    </svg>
+  </button>
 </div>
+
+<button id="wakechip">◉ WAKE WORD : OFF</button>
 
 <div id="typerow">
   <input id="textIn" placeholder="Type to JARVIS..." autocomplete="off">
@@ -264,7 +287,12 @@ function speak(text) {
     u.rate = 0.95; u.pitch = 0.75; u.lang = 'en-US'; // deeper, calmer delivery
     const v = pickVoice(); if (v) u.voice = v;
     document.body.classList.add('talking'); setStatus('SPEAKING');
-    u.onend = u.onerror = () => { document.body.classList.remove('talking'); setStatus('STANDBY'); };
+    const endSpeech = () => {
+      document.body.classList.remove('talking');
+      if (wakeModeOn()) setStatus(isAwake() ? 'AWAKE — SPEAK NOW' : 'DORMANT — SAY "JARVIS"');
+      else setStatus('STANDBY');
+    };
+    u.onend = u.onerror = endSpeech;
     speechSynthesis.speak(u);
   } catch (e) { setStatus('STANDBY'); }
 }
@@ -383,6 +411,87 @@ function bgTick() {
 }
 setInterval(bgTick, 5200);
 setTimeout(bgTick, 2500); setTimeout(bgTick, 4500);
+
+/* ---------- WAKE WORD: say "JARVIS" to wake him ----------
+   Web-maximum version: works while the page is open and the screen is on.
+   True background wake (screen off / app closed) needs a native Android app. */
+let wakeMode = false, awake = false, awakeTimer = null;
+const wakeChip = document.getElementById('wakechip');
+const WAKE_WINDOW = 15000; // stays awake 15s after last command
+function wakeModeOn() { return wakeMode; }
+function isAwake() { return awake; }
+
+wakeChip.addEventListener('click', () => {
+  if (wakeMode) { stopWake(); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { speak('Wake word needs Chrome on Android, sir.'); return; }
+  wakeMode = true;
+  wakeChip.textContent = '◉ WAKE WORD : ARMED';
+  wakeChip.classList.add('armed');
+  document.body.classList.add('wake-dormant');
+  setStatus('DORMANT — SAY "JARVIS"');
+  addLog('jarvis', 'Wake-word protocol armed. Say "JARVIS" and I shall awaken.');
+  try { speechSynthesis.cancel(); } catch (e) {}
+  wakeLoop();
+});
+
+function stopWake() {
+  wakeMode = false; awake = false;
+  clearTimeout(awakeTimer);
+  wakeChip.textContent = '◉ WAKE WORD : OFF';
+  wakeChip.classList.remove('armed');
+  document.body.classList.remove('wake-dormant', 'awake');
+  setStatus('STANDBY');
+}
+
+function wakeLoop() {
+  if (!wakeMode) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new SR();
+  rec.lang = 'en-US'; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+  rec.onresult = (e) => {
+    let finals = '', interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const tr = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finals += tr + ' '; else interim += tr;
+    }
+    const heard = (finals + ' ' + interim).toLowerCase();
+    if (!awake) {
+      if (heard.includes('jarvis')) doWakeUp();
+    } else if (finals.trim()) {
+      const cmd = finals.replace(/jarvis/gi, '').trim();
+      handleCommand(cmd || finals.trim());
+      prolongAwake();
+    }
+  };
+  rec.onend = () => { if (wakeMode) setTimeout(wakeLoop, 400); }; // auto-restart: always listening
+  rec.onerror = (e) => {
+    if (!wakeMode) return;
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      stopWake();
+      speak('Microphone access was denied, sir. Wake word disarmed.');
+    }
+  };
+  try { rec.start(); } catch (err) { setTimeout(wakeLoop, 800); }
+}
+
+function doWakeUp() {
+  awake = true;
+  document.body.classList.remove('wake-dormant');
+  document.body.classList.add('awake');
+  setStatus('AWAKE — SPEAK NOW');
+  speak('Yes, sir?');
+  prolongAwake();
+}
+function prolongAwake() {
+  clearTimeout(awakeTimer);
+  awakeTimer = setTimeout(() => {
+    awake = false;
+    document.body.classList.remove('awake');
+    document.body.classList.add('wake-dormant');
+    setStatus('DORMANT — SAY "JARVIS"');
+  }, WAKE_WINDOW);
+}
 
 /* ---------- BOOT ---------- */
 const bootLines = [
