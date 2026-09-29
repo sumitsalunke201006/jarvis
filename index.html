@@ -226,7 +226,7 @@ import * as THREE from 'three';
    "protocol arise" / "arise" is the user's secret max-performance code word.
    Plain text, case-insensitive substring match — no regex escaping needed. */
 const ARMOUR_ON_PHRASES = ["protocol arise", "arise", "armour up", "suit up", "full power"];
-const ARMOUR_OFF_PHRASES = ["stand down", "armour off", "power down", "normal mode"];
+const ARMOUR_OFF_PHRASES = ["shut down", "shutdown", "stand down", "armour off", "power down", "normal mode"];
 /* =============== end armour trigger phrases =============== */
 const micBtn = document.getElementById('mic');
 const micWrap = document.getElementById('micwrap');
@@ -341,6 +341,7 @@ async function askBrain(raw) {
   const cfg = getUplink();
   if (!cfg) { showUplink(); speak('The secure uplink is not configured yet, sir.'); return; }
   setStatus('CONSULTING NEURAL CORE');
+  document.body.classList.add('thinking'); // thinking vortex spins in 3D
   try {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 60000);
@@ -366,8 +367,10 @@ async function askBrain(raw) {
     convoHistory.push({ role: 'user', content: raw.slice(0, 500) });
     convoHistory.push({ role: 'assistant', content: reply.slice(0, 500) });
     while (convoHistory.length > 10) convoHistory.shift();
+    document.body.classList.remove('thinking');
     speak(reply);
   } catch (e) {
+    document.body.classList.remove('thinking');
     if (e && e.name === 'AbortError') {
       speak('Sir, the neural core is taking too long — likely waking from sleep. Give it thirty seconds, then try again.');
     } else {
@@ -514,7 +517,7 @@ function armReminder(r) {
   r.timer = setTimeout(() => fireReminder(r.id), Math.max(0, r.fireAt - Date.now()));
 }
 function addReminder(fireAt, text) {
-  const r = { id: 'r' + Date.now().toString(36) + Math.floor(Math.random() * 1e4), fireAt, text: String(text).slice(0, 200) };
+  const r = { id: 'r' + Date.now().toString(36) + Math.floor(Math.random() * 1e4), fireAt, text: String(text).slice(0, 200), total: Math.max(1, fireAt - Date.now()) };
   reminders.push(r); armReminder(r); persistReminders();
   return r;
 }
@@ -525,6 +528,7 @@ function fireReminder(id) {
   persistReminders();
   document.getElementById('remText').textContent = r.text;
   document.getElementById('remBanner').hidden = false;
+  beaconOn = true; // amber beacon column in 3D
   speak('Sir — a reminder. ' + r.text);
 }
 function parseAlarmTime(s) {
@@ -557,7 +561,7 @@ function loadReminders() {
   reminders.forEach(armReminder);
   persistReminders();
 }
-document.getElementById('remDismiss').addEventListener('click', () => { document.getElementById('remBanner').hidden = true; });
+document.getElementById('remDismiss').addEventListener('click', () => { document.getElementById('remBanner').hidden = true; beaconOn = false; });
 loadReminders();
 
 /* ---------- EARS (patient: waits through thinking pauses) ---------- */
@@ -587,7 +591,7 @@ function listen() {
   rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
   earRec = rec; earFinal = ''; earDone = false;
   rec.onstart = () => { recognizing = true; micWrap.classList.add('listening');
-    document.body.classList.add('listening'); setStatus('LISTENING'); };
+    document.body.classList.add('listening'); setStatus('LISTENING'); triggerPulse(); };
   const armSilence = () => { clearTimeout(earTimer); earTimer = setTimeout(earSubmit, EAR_SILENCE_MS); };
   rec.onresult = (e) => {
     let interim = '';
@@ -727,6 +731,7 @@ function doWakeUp() {
   document.body.classList.remove('wake-dormant');
   document.body.classList.add('awake');
   setStatus('AWAKE — SPEAK NOW');
+  triggerPulse();
   speak('Yes, sir?');
   prolongAwake();
 }
@@ -935,9 +940,31 @@ const rings = [], tintMats = [];
 let dust = null, stars = null;
 const waveBars = [];
 let waveMat = null, shock = null, shake = 0;
+/* pro-HUD systems: thinking vortex, live orbit rings, reminder beacon, countdown ring, wake pulse */
+let vortex = null, beacon = null, beaconOn = false, cdMesh = null, cdMat = null, cdLast = 0, burstT = 0;
+const orbitPivots = [], orbitLabels = [], pulses = [];
 const camCalm = new THREE.Vector3(0, 0.7, 13.5), camCombat = new THREE.Vector3(0, 1.15, 9.6);
 
 function tinted(mat, kind) { tintMats.push({ m: mat, kind }); return mat; }
+
+/* floating text sprite for the live orbit rings */
+function makeLabelSprite() {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+  const tex = new THREE.CanvasTexture(c);
+  if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  sp.scale.set(3.6, 0.9, 1);
+  return { sprite: sp,
+    draw(text, colCss) {
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0, 0, 512, 128);
+      ctx.font = '700 46px Orbitron, monospace'; ctx.textAlign = 'center';
+      ctx.shadowColor = colCss; ctx.shadowBlur = 12;
+      ctx.fillStyle = colCss;
+      ctx.fillText(String(text).slice(0, 26), 256, 84);
+      tex.needsUpdate = true;
+    } };
+}
 
 function makeParticles(n, spread, size, color, opacity) {
   const pos = new Float32Array(n*3), vel = new Float32Array(n*3);
@@ -1058,6 +1085,45 @@ function init3D() {
     }
   }
 
+  /* ----- live orbit rings: real stats riding the reactor ----- */
+  [
+    { r: 3.55, tilt: 0.55, sp: 0.28 },
+    { r: 4.05, tilt: -0.4, sp: -0.2 },
+    { r: 4.55, tilt: 0.95, sp: 0.14 },
+  ].forEach((d) => {
+    const pivot = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(d.r, 0.022, 8, 128),
+      tinted(new THREE.MeshBasicMaterial({ color: 0x46d8ff, transparent: true, opacity: 0.4,
+        blending: THREE.AdditiveBlending, depthWrite: false }), 'main'));
+    ring.rotation.x = Math.PI/2 + d.tilt;
+    pivot.add(ring);
+    const L = makeLabelSprite();
+    L.sprite.position.set(d.r, 0.55, 0);
+    pivot.add(L.sprite);
+    pivot.userData.sp = d.sp;
+    scene3.add(pivot); orbitPivots.push(pivot); orbitLabels.push(L);
+  });
+  drawOrbitLabels();
+  setInterval(drawOrbitLabels, 2000);
+
+  /* ----- thinking vortex: visible while consulting the neural core ----- */
+  vortex = new THREE.Mesh(new THREE.TorusKnotGeometry(0.8, 0.18, 48, 8),
+    tinted(new THREE.MeshBasicMaterial({ color: 0x46d8ff, wireframe: true, transparent: true,
+      opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }), 'main'));
+  vortex.position.set(0, 3.6, 0); vortex.visible = false; scene3.add(vortex);
+
+  /* ----- reminder beacon: amber column, fires with real reminders ----- */
+  beacon = new THREE.Group();
+  const bcol = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.85, 7, 20, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffc857, transparent: true, opacity: 0,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+  bcol.position.y = 3.2; beacon.add(bcol);
+  beacon.position.copy(reactor.position); beacon.visible = false; scene3.add(beacon);
+
+  /* ----- next-reminder countdown ring (rebuilt 1Hz) ----- */
+  cdMat = new THREE.MeshBasicMaterial({ color: 0xffc857, transparent: true, opacity: 0.85,
+    side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+
   /* ----- holographic panels ----- */
   for (const def of panelDefs) {
     const api = makePanel(def.w, def.h, def.cw, def.ch);
@@ -1073,7 +1139,7 @@ function init3D() {
   drawClock(); drawTele(); drawActivity(); drawStatus(); drawLog(); drawBanner();
   setInterval(drawClock, 1000);
   if (document.fonts && document.fonts.ready)
-    document.fonts.ready.then(() => { drawClock(); drawTele(); drawActivity(); drawStatus(); drawLog(); drawBanner(); });
+    document.fonts.ready.then(() => { drawClock(); drawTele(); drawActivity(); drawStatus(); drawLog(); drawBanner(); drawOrbitLabels(); });
 
   /* ----- long-press the 3D core → reopen uplink settings ----- */
   const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
@@ -1103,6 +1169,43 @@ function init3D() {
 }
 
 /* ---------- ARISE transformation machinery ---------- */
+/* small pulse ring + particle kick on wake / mic tap (no camera shake) */
+function triggerPulse() {
+  if (!threeOK) return;
+  burstT = 1;
+  const mesh = new THREE.Mesh(new THREE.RingGeometry(1.7, 1.85, 72),
+    new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.7,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+  mesh.position.copy(reactor.position);
+  mesh.rotation.x = -Math.PI/2 + 0.3;
+  scene3.add(mesh);
+  pulses.push({ mesh, t: 0 });
+}
+/* redraw the live orbit-ring labels from real state */
+function drawOrbitLabels() {
+  if (!orbitLabels.length) return;
+  const col = css(mixMain(_c1));
+  const up = (quota.remaining !== null && Number.isFinite(quota.remaining))
+    ? quota.remaining + '/' + quota.limit : '—/—';
+  const vals = ['UPLINK ' + up, 'REMINDERS ' + reminders.length, 'UPTIME ' + fmtUp(T.up)];
+  orbitLabels.forEach((L, i) => L.draw(vals[i], (i === 0 && quota.remaining === 0) ? '#ff7a5c' : col));
+}
+/* next-reminder countdown ring: arc fills as the nearest reminder approaches */
+function updateCountdown(t) {
+  if (!threeOK || t - cdLast < 1) return;
+  cdLast = t;
+  let best = null;
+  for (const r of reminders) if (r.fireAt > Date.now() && (!best || r.fireAt < best.fireAt)) best = r;
+  if (cdMesh) { scene3.remove(cdMesh); cdMesh.geometry.dispose(); cdMesh = null; }
+  if (!best) return;
+  const span = best.total > 0 ? best.total : 3600000;
+  const frac = Math.min(1, Math.max(0, 1 - (best.fireAt - Date.now()) / span));
+  if (frac < 0.02) return;
+  const arc = frac * Math.PI * 2;
+  cdMesh = new THREE.Mesh(new THREE.RingGeometry(2.82, 2.98, 72, 1, Math.PI/2 - arc, arc), cdMat);
+  cdMesh.rotation.x = -Math.PI/2; cdMesh.position.y = -1.35;
+  scene3.add(cdMesh);
+}
 function triggerShockwave() {
   if (!threeOK) return;
   if (shock) { scene3.remove(shock.mesh); shock.mesh.geometry.dispose(); shock.mesh.material.dispose(); }
@@ -1121,6 +1224,22 @@ let actx = null;
 function ensureAudio() {
   if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
   if (actx && actx.state === 'suspended') actx.resume();
+  ensureMicAnalyser();
+}
+/* ----- true-voice mic analyser: drives the waveform bars with real audio ----- */
+let micAnalyser = null;
+const freqBins = new Uint8Array(48);
+function ensureMicAnalyser() {
+  if (micAnalyser || !actx || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+  navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+    .then(stream => {
+      try {
+        const src = actx.createMediaStreamSource(stream);
+        micAnalyser = actx.createAnalyser();
+        micAnalyser.fftSize = 96; micAnalyser.smoothingTimeConstant = 0.72;
+        src.connect(micAnalyser);
+      } catch (e) { micAnalyser = null; }
+    }).catch(() => { micAnalyser = null; });
 }
 function powerTone(up) {
   if (!actx || reducedMotion) return;
@@ -1182,19 +1301,28 @@ function animate() {
   glow.material.opacity = 0.8 + ariseT*0.2;
   for (const r of rings) r.mesh.rotation.z += r.sp * r.dir * dt * (1 + ariseT*5.5) * sBoost;
 
-  /* particles drift + ARISE burst */
-  updateParticles(dust, dt, (1 + ariseT*3.2) * sBoost);
+  /* particles drift + ARISE burst + wake kick */
+  updateParticles(dust, dt, (1 + ariseT*3.2 + burstT*4) * sBoost);
   updateParticles(stars, dt * 0.25, 1);
   dust.material.size = 0.07 + ariseT*0.05;
 
-  /* waveform arc */
+  /* waveform arc — real mic FFT when listening, synthetic motion otherwise */
   const bcls = document.body.classList;
-  const lvl = bcls.contains('listening') ? 1 : bcls.contains('talking') ? 0.85 : bcls.contains('awake') ? 0.5 : 0.28;
-  const wspd = (bcls.contains('listening') || bcls.contains('talking')) ? 9 : 2.5;
-  waveBars.forEach((bar, i) => {
-    bar.scale.y = Math.max(0.12, 0.22 + lvl*(0.55 + 0.45*Math.sin(t*wspd + i*0.7)) * (1.15 + ariseT*0.9));
-  });
-  if (bcls.contains('listening')) waveMat.color.copy(COL.amber); else mixMain(waveMat.color);
+  const listening = bcls.contains('listening');
+  if (micAnalyser && listening) {
+    micAnalyser.getByteFrequencyData(freqBins);
+    waveBars.forEach((bar, i) => {
+      const v = freqBins[Math.floor(i / waveBars.length * 30)] / 255;
+      bar.scale.y = Math.max(0.12, 0.2 + v * 2.6 * (1.15 + ariseT*0.9));
+    });
+  } else {
+    const lvl = listening ? 1 : bcls.contains('talking') ? 0.85 : bcls.contains('awake') ? 0.5 : 0.28;
+    const wspd = (listening || bcls.contains('talking')) ? 9 : 2.5;
+    waveBars.forEach((bar, i) => {
+      bar.scale.y = Math.max(0.12, 0.22 + lvl*(0.55 + 0.45*Math.sin(t*wspd + i*0.7)) * (1.15 + ariseT*0.9));
+    });
+  }
+  if (listening) waveMat.color.copy(COL.amber); else mixMain(waveMat.color);
 
   /* panels: calm ↔ combat layout + yaw billboard */
   for (const p of panels) {
@@ -1215,6 +1343,40 @@ function animate() {
     shock.mesh.material.opacity = Math.max(0, 0.85*(1 - st));
     if (st >= 1) { scene3.remove(shock.mesh); shock.mesh.geometry.dispose(); shock.mesh.material.dispose(); shock = null; }
   }
+
+  /* wake pulse rings */
+  for (let i = pulses.length - 1; i >= 0; i--) {
+    const p = pulses[i]; p.t += dt;
+    const st = p.t / 0.7;
+    p.mesh.scale.setScalar(1 + p.t*6);
+    p.mesh.material.opacity = Math.max(0, 0.7*(1 - st));
+    if (st >= 1) { scene3.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); pulses.splice(i, 1); }
+  }
+  burstT = Math.max(0, burstT - dt*1.4);
+
+  /* thinking vortex — spins only while the neural core is working */
+  if (vortex) {
+    vortex.visible = bcls.contains('thinking');
+    if (vortex.visible) {
+      if (!reducedMotion) { vortex.rotation.y += dt*3.2; vortex.rotation.x += dt*1.1; }
+      vortex.scale.setScalar(1 + Math.sin(t*5)*0.07);
+    }
+  }
+
+  /* orbit stat rings drift */
+  for (const o of orbitPivots) o.rotation.y += o.userData.sp * dt * sBoost;
+
+  /* reminder beacon pulse */
+  if (beacon) {
+    beacon.visible = beaconOn;
+    if (beaconOn) {
+      beacon.children[0].material.opacity = 0.22 + 0.28*(0.5 + 0.5*Math.sin(t*6));
+      beacon.rotation.y += dt*0.8;
+    }
+  }
+
+  /* next-reminder countdown ring */
+  updateCountdown(t);
 
   renderer.render(scene3, camera);
 }
