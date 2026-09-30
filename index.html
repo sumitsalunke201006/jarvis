@@ -375,7 +375,7 @@ function parseCalendarWhen(raw) {
   const start = new Date(day); start.setHours(h, min, 0, 0);
   if (!matchedDay && start <= now) start.setDate(start.getDate() + 1);
   const end = new Date(start.getTime() + 60 * 60 * 1000);
-  const title = t.replace(/\s+/g, ' ').trim().replace(/^(at|on|for)\s+/, '').replace(/\s+(at|on|for)$/, '');
+  const title = t.replace(/\s+/g, ' ').trim().replace(/^(at|on|for|to)\s+/, '').replace(/\s+(at|on|for)$/, '');
   return { start, end, title };
 }
 function speakWhen(d) {
@@ -391,8 +391,18 @@ function speakWhen(d) {
   if (diffDays > 1 && diffDays < 7) return days[d.getDay()] + ' at ' + time;
   return mons[d.getMonth()] + ' ' + d.getDate() + ' at ' + time;
 }
-async function addCalendarEvent(title, whenText) {
-  const parsed = parseCalendarWhen(whenText || '');
+function calendarAddFromText(t) {
+  // "<verb> <words> on|to (my|google) calendar <words>" — title/when may sit on either side of the marker
+  const s = ' ' + t.replace(/^(?:please\s+)?(?:set|add|create|put|schedule|remind me)\s+/, '') + ' ';
+  const parsed = parseCalendarWhen(s.replace(/\b(on|to)\s+(?:my\s+|google\s+)?calendar\b/, ' \u0001 ').split('').join(' '));
+  if (!parsed) { speak('When should I set it, sir? Say it like "set dentist on google calendar tomorrow at 5pm".'); return; }
+  let title = parsed.title.replace(/^(an?|the)\s+(event|reminder|appointment|meeting)\s+/i, '')
+    .replace(/^(at|on|for|to)\s+/i, '').trim().slice(0, 120);
+  if (!title) title = 'Reminder';
+  addCalendarEvent(title, '', parsed);
+}
+async function addCalendarEvent(title, whenText, preparsed) {
+  const parsed = preparsed || parseCalendarWhen(whenText || '');
   if (!parsed) { speak('When should I set it, sir? Try "add ' + title + ' to my calendar tomorrow at 5pm".'); return; }
   const finalTitle = parsed.title || title;
   if (!finalTitle) { speak('What should I call the event, sir?'); return; }
@@ -603,14 +613,16 @@ function handleCommand(raw) {
     else speak('Armour is already offline, sir.');
     return;
   }
-  /* Google Calendar — handled locally, no neural-core call needed */
-  const calAdd = t.match(/^add (.+?) to (my )?calendar(.*)$/);
-  if (calAdd) { addCalendarEvent(calAdd[1].trim().slice(0, 120), (calAdd[3] || '').trim()); return; }
-  const calSched = t.match(/^schedule (.+)$/);
-  if (calSched) { addCalendarEvent('', calSched[1].trim().slice(0, 160)); return; }
+  /* Google Calendar — handled locally, no neural-core call needed.
+     Runs before local reminders: "remind me … on google calendar" is a calendar event. */
   if (/(what'?s|what is) on my calendar/.test(t) || /\bcalendar (today|tomorrow|day after tomorrow)\b/.test(t)) {
     readCalendarDay(t); return;
   }
+  if (/^(?:please\s+)?schedule\b/.test(t)) { calendarAddFromText(t); return; }
+  if (/\bcalendar\b/.test(t) && /^(?:please\s+)?(?:set|add|create|put|schedule)\b/.test(t)) {
+    calendarAddFromText(t); return;
+  }
+  if (/^remind me\b/.test(t) && /\bgoogle calendar\b/.test(t)) { calendarAddFromText(t); return; }
   /* Gmail (read-only) — handled locally, no neural-core call needed */
   const mailFrom = t.match(/(?:mail|email|emails)\s+from\s+(.+)$/);
   if (mailFrom) { searchMail(mailFrom[1].trim().slice(0, 40)); return; }
