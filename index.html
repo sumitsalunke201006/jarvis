@@ -171,6 +171,12 @@
       <button id="upTest">TEST UPLINK</button>
     </div>
     <div id="upTestResult" class="up-result"></div>
+    <div class="up-sub" style="margin-top:18px">GMAIL — READ ONLY</div>
+    <div class="up-row" style="align-items:center">
+      <span id="gmailStatus" class="up-result" style="flex:1">Not checked.</span>
+      <button id="gmailConnect">CONNECT GMAIL</button>
+    </div>
+    <div class="up-note">JARVIS reads mail — never sends, never deletes.<br>Google may ask you to sign in again about once a week.</div>
     <div class="up-note">Stored only on this device.<br>The passphrase is never displayed back.<br>Long-press the reactor core to reopen this panel.</div>
   </div>
 </div>
@@ -308,6 +314,82 @@ document.getElementById('upSave').addEventListener('click', () => {
 });
 document.getElementById('upCancel').addEventListener('click', () => { hideUplink(); setStatus('STANDBY'); });
 document.getElementById('uplinkBtn').addEventListener('click', () => { showUplink(); });
+/* ---------- Gmail (read-only): status, connect, voice commands ---------- */
+let lastMailIds = [];
+async function gmailApi(path, params) {
+  const cfg = getUplink();
+  if (!cfg) { showUplink(); speak('The secure uplink is not configured yet, sir.'); return null; }
+  try {
+    const r = await fetch(cfg.url + path + '?' + new URLSearchParams(params || {}),
+      { headers: { 'x-jarvis-key': cfg.key } });
+    return await r.json();
+  } catch (e) { return { ok: false, reply: 'My link to the neural core faltered, sir.' }; }
+}
+async function refreshGmailStatus() {
+  const el = document.getElementById('gmailStatus');
+  const cfg = getUplink();
+  if (!cfg) { el.textContent = 'Set up the uplink first.'; el.className = 'up-result'; return; }
+  el.textContent = 'Checking…'; el.className = 'up-result';
+  try {
+    const r = await fetch(cfg.url + '/api/gmail/status', { headers: { 'x-jarvis-key': cfg.key } });
+    const j = await r.json();
+    if (j && j.ok && j.connected) { el.textContent = 'CONNECTED — read-only.'; el.className = 'up-result good'; }
+    else if (j && j.ok && j.configured) { el.textContent = 'Not connected yet.'; el.className = 'up-result'; }
+    else { el.textContent = 'Brain needs Gmail keys (see setup).'; el.className = 'up-result bad'; }
+  } catch (e) { el.textContent = 'Could not reach the brain.'; el.className = 'up-result bad'; }
+}
+document.getElementById('gmailConnect').addEventListener('click', () => {
+  const cfg = getUplink();
+  if (!cfg) { showUplink(); return; }
+  window.open(cfg.url + '/api/gmail/connect?key=' + encodeURIComponent(cfg.key), '_blank');
+  setTimeout(refreshGmailStatus, 15000);
+});
+const _showUplink = showUplink;
+showUplink = function () { _showUplink(); refreshGmailStatus(); };
+function shortFrom(f) {
+  return String(f || 'unknown').split('<')[0].trim().split(' ').slice(0, 2).join(' ') || 'unknown';
+}
+async function checkMail() {
+  setStatus('CHECKING MAIL');
+  const j = await gmailApi('/api/gmail/unread', { max: '5' });
+  if (!j) return;
+  if (!j.ok) { speak(j.reply || 'Gmail is not connected yet, sir — open settings and connect it first.'); return; }
+  const ms = j.messages || [];
+  lastMailIds = ms.map((m) => m.id);
+  if (!ms.length) { speak('No unread mail, sir. A clean inbox.'); return; }
+  const names = ms.slice(0, 3).map((m) => shortFrom(m.from));
+  speak(ms.length + ' unread, sir. From ' + joinNames(names) +
+    (ms.length > 3 ? ', and others.' : '.') + ' Say "read my latest email" and I shall read it aloud.');
+}
+async function searchMail(who) {
+  setStatus('SEARCHING MAIL');
+  const j = await gmailApi('/api/gmail/unread', { q: 'from:' + who, max: '3' });
+  if (!j) return;
+  if (!j.ok) { speak(j.reply || 'Gmail is not connected yet, sir.'); return; }
+  const ms = j.messages || [];
+  lastMailIds = ms.map((m) => m.id);
+  if (!ms.length) { speak('Nothing unread from ' + who + ', sir.'); return; }
+  speak(ms.length + ' unread from ' + shortFrom(ms[0].from) + ', sir. Subject: ' + (ms[0].subject || 'no subject') + '.');
+}
+async function readLatestMail() {
+  if (!lastMailIds.length) {
+    const j = await gmailApi('/api/gmail/unread', { max: '1' });
+    if (!j || !j.ok || !(j.messages || []).length) {
+      speak(j && j.reply ? j.reply : 'No unread mail to read, sir.');
+      return;
+    }
+    lastMailIds = j.messages.map((m) => m.id);
+  }
+  setStatus('READING MAIL');
+  const j = await gmailApi('/api/gmail/read', { id: lastMailIds[0] });
+  if (!j) return;
+  if (!j.ok || !j.message) { speak(j.reply || 'I could not open that email, sir.'); return; }
+  const m = j.message;
+  const body = String(m.body || '').slice(0, 600);
+  speak('From ' + shortFrom(m.from) + '. Subject: ' + (m.subject || 'no subject') + '. ' +
+    (body ? body : 'The body came through empty, sir.'));
+}
+
 document.getElementById('upTest').addEventListener('click', async () => {
   const out = document.getElementById('upTestResult');
   const url = document.getElementById('upUrl').value.trim().replace(/\/+$/, '');
@@ -407,6 +489,11 @@ function handleCommand(raw) {
     else speak('Armour is already offline, sir.');
     return;
   }
+  /* Gmail (read-only) — handled locally, no neural-core call needed */
+  const mailFrom = t.match(/(?:mail|email|emails)\s+from\s+(.+)$/);
+  if (mailFrom) { searchMail(mailFrom[1].trim().slice(0, 40)); return; }
+  if (/read (my |the )?(latest|last|newest|that) (email|mail)/.test(t)) { readLatestMail(); return; }
+  if (/\b(check|any|do i have)\b.*\b(mail|email|inbox)\b/.test(t)) { checkMail(); return; }
   if (t === 'close notebook' || t === 'close the notebook') {
     const p = document.getElementById('nbPanel');
     if (p && !p.hidden) { closeNotebookPanel(); speak('Notebook closed, sir.'); }
