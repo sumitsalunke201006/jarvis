@@ -393,6 +393,22 @@ document.getElementById('voiceTest').addEventListener('click', () => {
   speak('Voice set, sir. How do I sound?');
 });
 
+/* ---------- EMOTION → PERFORMANCE: same Daniel, different feeling ----------
+   The brain tags every reply's emotion; the page performs it with speed+pitch.
+   Excited news runs faster and brighter; comfort and bad news slow down low. */
+const EMOTION_VOICE = {
+  neutral:  { rate: 0.95, pitch: 0.75 },
+  warm:     { rate: 0.92, pitch: 0.78 },
+  happy:    { rate: 1.02, pitch: 0.85 },
+  excited:  { rate: 1.10, pitch: 0.90 },
+  serious:  { rate: 0.88, pitch: 0.66 },
+  sad:      { rate: 0.84, pitch: 0.64 },
+  urgent:   { rate: 1.12, pitch: 0.82 },
+  playful:  { rate: 1.05, pitch: 0.88 },
+  proud:    { rate: 0.94, pitch: 0.80 },
+};
+function emotionVoice(e) { return EMOTION_VOICE[e] || EMOTION_VOICE.neutral; }
+
 /* ---------- SECURE UPLINK (neural core connection) ---------- */
 // Pages build marker — do not remove:
 const uplinkSetup = 'v4-3d';
@@ -682,7 +698,7 @@ async function askBrain(raw) {
     convoHistory.push({ role: 'assistant', content: reply.slice(0, 500) });
     while (convoHistory.length > 10) convoHistory.shift();
     document.body.classList.remove('thinking');
-    speak(reply);
+    speak(reply, emotionVoice(data && data.emotion)); // perform the reply's feeling
   } catch (e) {
     document.body.classList.remove('thinking');
     if (e && e.name === 'AbortError') {
@@ -1254,7 +1270,7 @@ async function maybeMorningBrief() {
   const j = await brainGet('/api/brief/morning');
   if (j && j.ok && j.reply) {
     localStorage.setItem('jarvis_brief_date', today);
-    speak(j.reply);
+    speak(j.reply, emotionVoice(j.emotion));
   }
 }
 /* First tap unlocks audio; if he doesn't immediately give an order, brief him. */
