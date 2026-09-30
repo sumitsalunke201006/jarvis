@@ -147,13 +147,6 @@
   /* ---------- DOMAIN EXPANSION cinematic overlays ---------- */
   #domainFlood { position: fixed; inset: 0; z-index: 90; pointer-events: none; opacity: 0;
     background: radial-gradient(ellipse at center, #3b1470 0%, #1c0738 48%, #070213 100%); }
-  #domainDark { position: fixed; inset: 0; z-index: 89; pointer-events: none; opacity: 0; background: #010103; }
-  #voidTitle { position: fixed; left: 0; right: 0; top: 42%; z-index: 93; pointer-events: none;
-    text-align: center; font-family: 'Orbitron', sans-serif; font-weight: 300;
-    font-size: clamp(2rem, 9vw, 4.5rem); letter-spacing: .45em; text-indent: .45em; color: #efe6ff;
-    text-shadow: 0 0 30px rgba(168,120,255,.8), 0 0 90px rgba(124,58,237,.5);
-    opacity: 0; transform: scale(.96); transition: opacity .8s ease, transform 1.8s ease; }
-  #voidTitle.show { opacity: 1; transform: scale(1); }
   #potentialPill { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%) translateY(8px);
     z-index: 60; pointer-events: none; font-family: 'Share Tech Mono', monospace; font-size: .62rem;
     letter-spacing: 3px; color: #d9c2ff; white-space: nowrap;
@@ -167,9 +160,9 @@
     animation: fireFlick .16s infinite alternate; }
   @keyframes fireFlick { from { filter: brightness(.8) saturate(1.1); } to { filter: brightness(1.25) saturate(1.45); } }
   /* while the domain is active, every DOM element except the 3D canvas + overlays clears away */
-  body > *:not(#scene):not(#domainFlood):not(#domainFlash):not(#domainFire):not(#domainDark):not(#voidTitle):not(#potentialPill):not(script):not(style) {
+  body > *:not(#scene):not(#domainFlood):not(#domainFlash):not(#domainFire):not(#potentialPill):not(script):not(style) {
     transition: opacity .5s ease, filter .5s ease; }
-  body.domain-active > *:not(#scene):not(#domainFlood):not(#domainFlash):not(#domainFire):not(#domainDark):not(#voidTitle):not(#potentialPill):not(script):not(style) {
+  body.domain-active > *:not(#scene):not(#domainFlood):not(#domainFlash):not(#domainFire):not(#potentialPill):not(script):not(style) {
     opacity: 0 !important; filter: blur(10px); pointer-events: none !important; }
 
   /* ---------- HUD SIDE PANELS (iPad rails + mobile) ---------- */
@@ -212,8 +205,6 @@
 <div id="domainFlood"></div>
 <div id="domainFlash"></div>
 <div id="domainFire"></div>
-<div id="domainDark"></div>
-<div id="voidTitle">INFINITY VOID</div>
 <div id="potentialPill">KAIROS // 100% POTENTIAL</div>
 
 <!-- BOOT SEQUENCE -->
@@ -934,6 +925,7 @@ function makeVoid() {
   g.visible = false;
   return { grp: g, ico1, ico2, torus, core, coreBase, layers, motes, seeds };
 }
+window.__playDomainExpansion = playDomainExpansion;
 function playDomainExpansion() {
   if (domainFX) return;
   if (!threeOK || reducedMotion) { // graceful: no 3D, still engage
@@ -950,8 +942,8 @@ function playDomainExpansion() {
   const voidG = makeVoid();
   scene3.add(voidG.grp);
   domainFX = { t: 0, blue, purple, voidG, rings: [], phase: 'materialize',
-    flashV: 0, floodV: 0, darkV: 0, surged: false,
-    titleShown: false, titleGone: false, armourSet: false, pillShown: false, uiBack: false };
+    flashV: 0, floodV: 0, surged: false,
+    voiceDone: false, armourSet: false, pillShown: false, uiBack: false };
   domainFX.embers = makeEmberSystem();
   scene3.add(domainFX.embers.points);
   domainSound('pulse'); // deep atmospheric pulse — silence and darkness
@@ -1019,8 +1011,7 @@ function updateDomainFX(dt) {
       }
     }
   };
-  const D = document.getElementById('domainDark'),
-        FL = document.getElementById('domainFlood'),
+  const FL = document.getElementById('domainFlood'),
         FS = document.getElementById('domainFlash');
   if (T < 2.0) {
     // PHASE 1 — ACTIVATION: slow, majestic materialization in silence and darkness
@@ -1033,7 +1024,6 @@ function updateDomainFX(dt) {
     flick(fx.blue, T); flick(fx.purple, T);
     emberSpawn(fx, fx.blue.grp.position.x, fx.blue.grp.position.y, 5, 0.45, 0.62, 1, 1.4, 0.9);
     emberSpawn(fx, fx.purple.grp.position.x, fx.purple.grp.position.y, 5, 0.68, 0.42, 1, 1.4, 0.9);
-    fx.darkV = Math.min(1, T / 0.6);
   } else if (T < 3.1) {
     // PHASE 2 — COLLISION COURSE: sudden acceleration toward the exact center
     const e = Math.pow((T - 2.0) / 1.1, 3.2);
@@ -1048,7 +1038,6 @@ function updateDomainFX(dt) {
       emberSpawn(fx, fx.purple.grp.position.x, fx.purple.grp.position.y, 5, 0.68, 0.42, 1, 0.5, 0.6);
     }
     shake = Math.max(shake, e * 0.9); // the screen subtly shakes as they close in
-    fx.darkV = 1;
   } else {
     if (fx.phase !== 'void') {
       // IMPACT — massive but clean: flash, shockwaves, the spheres are gone
@@ -1098,22 +1087,16 @@ function updateDomainFX(dt) {
       r.mesh.material.opacity = Math.max(0, 0.9 * (1 - r.t / 1.2));
     }
     fx.floodV = pt < 0.35 ? pt / 0.35 : 1;
-    if (pt >= 1.0 && !fx.titleShown) { // the words appear — and Kairos speaks them
-      fx.titleShown = true;
-      document.getElementById('voidTitle').classList.add('show');
-      speak('Infinity Void.', { rate: 0.8, pitch: 0.6 }); // calm, deep, controlled — never shouting
+    if (pt >= 1.0 && !fx.voiceDone) { // Kairos speaks into the void — calm, deep, controlled
+      fx.voiceDone = true;
+      speak('Infinity Void.', { rate: 0.8, pitch: 0.6 }); // never shouting
       domainSound('voidDrone');
-    }
-    if (pt >= 2.3 && !fx.titleGone) {
-      fx.titleGone = true;
-      document.getElementById('voidTitle').classList.remove('show');
     }
     if (pt >= 2.4) {
       // PHASE 4 — the void rapidly collapses into the Kairos interface
       const c = Math.min(1, (pt - 2.4) / 0.7);
       V.grp.scale.setScalar(Math.max(0.01, 1 - c));
       fx.floodV = Math.max(0, 1 - c);
-      fx.darkV = Math.max(0, 1 - c);
       if (!fx.armourSet) { fx.armourSet = true; setArmour(true); domainSound('lockin'); }
       if (!fx.pillShown) { fx.pillShown = true; document.getElementById('potentialPill').classList.add('show'); }
       if (!fx.uiBack && c > 0.55) { fx.uiBack = true; document.body.classList.remove('domain-active'); }
@@ -1132,14 +1115,12 @@ function updateDomainFX(dt) {
       disposeGrp(fx.blue); disposeGrp(fx.purple); disposeGrp(fx.voidG);
       for (const r of fx.rings) { scene3.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); }
       if (fx.embers) { scene3.remove(fx.embers.points); fx.embers.points.geometry.dispose(); fx.embers.points.material.dispose(); }
-      if (D) D.style.opacity = 0; if (FL) FL.style.opacity = 0; if (FS) FS.style.opacity = 0;
-      document.getElementById('voidTitle').classList.remove('show');
+      if (FL) FL.style.opacity = 0; if (FS) FS.style.opacity = 0;
       document.body.classList.remove('domain-active');
       domainFX = null;
     }
   }
   fx.flashV = Math.max(0, fx.flashV - dt * 2.4);
-  if (D) D.style.opacity = fx.darkV.toFixed(3);
   if (FL) FL.style.opacity = fx.floodV.toFixed(3);
   if (FS) FS.style.opacity = fx.flashV.toFixed(3);
 }
