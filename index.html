@@ -7,8 +7,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="AEGIS">
-<title>AEGIS</title>
+<meta name="apple-mobile-web-app-title" content="KAIROS">
+<title>KAIROS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -200,7 +200,7 @@
 <div id="domainFire"></div>
 
 <!-- BOOT SEQUENCE -->
-<div id="boot"><div id="bootlines"></div><div id="bootTap">▸ TAP TO WAKE AEGIS</div></div>
+<div id="boot"><div id="bootlines"></div><div id="bootTap">▸ TAP TO WAKE KAIROS</div></div>
 
 <!-- SECURE UPLINK SETUP -->
 <div id="uplink">
@@ -226,7 +226,7 @@
       <span id="gmailStatus" class="up-result" style="flex:1">Not checked.</span>
       <button id="gmailConnect">CONNECT GOOGLE</button>
     </div>
-    <div class="up-note">Gmail: AEGIS reads mail — never sends, never deletes.<br>Calendar: reads your day, creates events on command.<br>Google may ask you to sign in again about once a week.</div>
+    <div class="up-note">Gmail: KAIROS reads mail — never sends, never deletes.<br>Calendar: reads your day, creates events on command.<br>Google may ask you to sign in again about once a week.</div>
     <div class="up-note">Stored only on this device.<br>The passphrase is never displayed back.<br>Long-press the reactor core to reopen this panel.</div>
   </div>
 </div>
@@ -235,7 +235,7 @@
 <div id="dock">
   <div id="micwrap">
     <div class="ripple"></div><div class="ripple d2"></div>
-    <button id="mic" title="Talk to AEGIS">
+    <button id="mic" title="Talk to KAIROS">
       <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
         <rect x="9" y="2.5" width="6" height="11" rx="3"/>
         <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/>
@@ -247,7 +247,7 @@
   <button id="wakechip">◉ WAKE WORD : OFF</button>
   <button id="uplinkBtn" title="Uplink settings">⚙ UPLINK</button>
   <div id="typerow">
-    <input id="textIn" placeholder="Type to AEGIS..." autocomplete="off">
+    <input id="textIn" placeholder="Type to KAIROS..." autocomplete="off">
     <button id="send">SEND</button>
   </div>
   <div id="dockhint">LONG-PRESS CORE · UPLINK</div>
@@ -285,7 +285,7 @@
 <script type="module">
 import * as THREE from 'three';
 /* =====================================================================
-   AEGIS v5 — full-screen 3D immersive HUD.
+   KAIROS v5 — full-screen 3D immersive HUD.
    All brain wiring preserved: wake word, neural uplink, armour/ARISE,
    secure uplink panel, local commands. The DISPLAY is now fully 3D.
    ===================================================================== */
@@ -330,7 +330,7 @@ function speak(text) {
     document.body.classList.add('talking'); setStatus('SPEAKING');
     const endSpeech = () => {
       document.body.classList.remove('talking');
-      if (wakeModeOn()) setStatus(isAwake() ? 'AWAKE — SPEAK NOW' : 'DORMANT — SAY "AEGIS"');
+      if (wakeModeOn()) setStatus(isAwake() ? 'AWAKE — SPEAK NOW' : 'DORMANT — SAY "KAIROS"');
       else setStatus('STANDBY');
     };
     u.onend = u.onerror = endSpeech;
@@ -343,7 +343,7 @@ function speak(text) {
     }
   } catch (e) {
     document.body.classList.remove('talking');
-    setStatus(wakeModeOn() ? (isAwake() ? 'AWAKE — SPEAK NOW' : 'DORMANT — SAY "AEGIS"') : 'STANDBY');
+    setStatus(wakeModeOn() ? (isAwake() ? 'AWAKE — SPEAK NOW' : 'DORMANT — SAY "KAIROS"') : 'STANDBY');
   }
 }
 if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => {};
@@ -1402,7 +1402,7 @@ function bgTick() {
 setInterval(bgTick, 5200);
 setTimeout(bgTick, 2500); setTimeout(bgTick, 4500);
 
-/* ---------- WAKE WORD: say "AEGIS" ("EE-jis") to wake him ----------
+/* ---------- WAKE WORD: say "KAIROS" ("KY-ross") to wake him ----------
    Web-maximum version: works while the page is open and the screen is on.
    True background wake (screen off / app closed) needs a native Android app. */
 let wakeMode = false, awake = false, awakeTimer = null;
@@ -1420,8 +1420,8 @@ wakeChip.addEventListener('click', () => {
   wakeChip.textContent = '◉ WAKE WORD : ARMED';
   wakeChip.classList.add('armed');
   document.body.classList.add('wake-dormant');
-  setStatus('DORMANT — SAY "AEGIS"');
-  addLog('jarvis', 'Wake-word protocol armed. Say "AEGIS" and I shall awaken.');
+  setStatus('DORMANT — SAY "KAIROS"');
+  addLog('jarvis', 'Wake-word protocol armed. Say "KAIROS" and I shall awaken.');
   try { speechSynthesis.cancel(); } catch (e) {}
   wakeLoop();
 });
@@ -1448,12 +1448,12 @@ function wakeLoop() {
     }
     const heard = (finals + ' ' + interim).toLowerCase();
     if (!awake) {
-      if (heard.includes('aegis')) { wakeFinal = ''; doWakeUp(); }
+      if (heard.includes('kairos')) { wakeFinal = ''; doWakeUp(); }
     } else {
       if (finals.trim()) wakeFinal += finals + ' ';
       clearTimeout(wakeTimer);
       wakeTimer = setTimeout(() => {
-        const cmd = wakeFinal.replace(/aegis/gi, '').trim();
+        const cmd = wakeFinal.replace(/kairos/gi, '').trim();
         wakeFinal = '';
         if (awake && cmd) { handleCommand(cmd); prolongAwake(); }
       }, EAR_SILENCE_MS);
@@ -1483,12 +1483,12 @@ function prolongAwake() {
   clearTimeout(awakeTimer);
   awakeTimer = setTimeout(() => {
     clearTimeout(wakeTimer);
-    const cmd = wakeFinal.replace(/aegis/gi, '').trim();
+    const cmd = wakeFinal.replace(/kairos/gi, '').trim();
     wakeFinal = '';
     awake = false;
     document.body.classList.remove('awake');
     document.body.classList.add('wake-dormant');
-    setStatus('DORMANT — SAY "AEGIS"');
+    setStatus('DORMANT — SAY "KAIROS"');
     if (cmd) handleCommand(cmd); // answer what he managed to say before dozing off
   }, WAKE_WINDOW);
 }
@@ -1632,7 +1632,7 @@ function drawLog() {
     for (let i = logEntries.length - 1; i >= 0; i--) {
       const e = logEntries[i];
       const color = e.who === 'you' ? '#ffc857' : '#cfeeff';
-      const lines = wrap(ctx, '[' + e.ts + '] ' + (e.who === 'you' ? 'YOU' : 'AEGIS') + ': ' + e.text, w - 58);
+      const lines = wrap(ctx, '[' + e.ts + '] ' + (e.who === 'you' ? 'YOU' : 'KAIROS') + ': ' + e.text, w - 58);
       for (let j = lines.length - 1; j >= 0; j--) {
         if (y < 84) break;
         ctx.fillStyle = color; ctx.fillText(lines[j], 30, y); y -= lh;
