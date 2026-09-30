@@ -92,8 +92,12 @@
     border: 1px solid var(--cyan-dim); color: #eaf7ff; padding: 11px 12px;
     font-family: inherit; font-size: .85rem; outline: none; opacity: 1; }
   #uplinkPanel input:focus { border-color: var(--cyan); }
+  #uplinkPanel select { display: block; width: 100%; margin-top: 6px; background: rgba(1,8,16,.8);
+    border: 1px solid var(--cyan-dim); color: #eaf7ff; padding: 11px 12px;
+    font-family: inherit; font-size: .85rem; outline: none; }
+  #uplinkPanel select:focus { border-color: var(--cyan); }
   .up-row { display: flex; gap: 10px; margin-top: 4px; }
-  #upSave, #upCancel, #upTest { flex: 1; font-family: 'Orbitron', sans-serif; font-size: .62rem; letter-spacing: 2px;
+  #upSave, #upCancel, #upTest, #voiceTest { flex: 1; font-family: 'Orbitron', sans-serif; font-size: .62rem; letter-spacing: 2px;
     padding: 12px 0; cursor: pointer; }
   #upSave { background: rgba(16,58,92,.6); border: 1px solid var(--cyan); color: #eaf7ff; }
   #upCancel { background: transparent; border: 1px solid var(--cyan-dim); color: var(--cyan); }
@@ -227,6 +231,12 @@
       <button id="gmailConnect">CONNECT GOOGLE</button>
     </div>
     <div class="up-note">Gmail: KAIROS reads mail — never sends, never deletes.<br>Calendar: reads your day, creates events on command.<br>Google may ask you to sign in again about once a week.</div>
+    <div class="up-sub" style="margin-top:18px">VOICE</div>
+    <div class="up-row" style="align-items:center">
+      <select id="voiceSelect" style="flex:3; min-width:0"></select>
+      <button id="voiceTest">TEST</button>
+    </div>
+    <div class="up-note">Choose how KAIROS sounds. Saved on this device.</div>
     <div class="up-note">Stored only on this device.<br>The passphrase is never displayed back.<br>Long-press the reactor core to reopen this panel.</div>
   </div>
 </div>
@@ -314,12 +324,33 @@ function addLog(who, text) {
 }
 
 /* ---------- VOICE ---------- */
+const VOICE_LS = 'kairos_voice_uri'; // his chosen voice, saved on this device
 function pickVoice() {
   const vs = speechSynthesis.getVoices();
+  const saved = localStorage.getItem(VOICE_LS);
+  if (saved) { const v = vs.find(v => v.voiceURI === saved); if (v) return v; }
   const prefs = [/Google UK English Male/i, /Daniel/i, /Google US English/i,
                  /Microsoft (Guy|David|James)/i, /Alex/i, /Fred/i];
   for (const p of prefs) { const v = vs.find(v => p.test(v.name)); if (v) return v; }
   return vs.find(v => v.lang && v.lang.startsWith('en')) || null;
+}
+function fillVoiceSelect() { // list every English voice so he can pick by ear
+  const sel = document.getElementById('voiceSelect');
+  if (!sel || !('speechSynthesis' in window)) return;
+  const vs = speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('en'));
+  const cur = sel.value;
+  sel.innerHTML = '';
+  if (!vs.length) {
+    const o = document.createElement('option'); o.textContent = 'Loading voices…'; sel.appendChild(o); return;
+  }
+  vs.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v.voiceURI;
+    o.textContent = v.name + ' (' + v.lang + ')';
+    sel.appendChild(o);
+  });
+  const want = cur || localStorage.getItem(VOICE_LS) || (pickVoice() || {}).voiceURI;
+  if (want) sel.value = want;
 }
 function speak(text, opts) {
   addLog('jarvis', text);
@@ -346,7 +377,13 @@ function speak(text, opts) {
     setStatus(wakeDesired ? (awake ? 'AWAKE — SPEAK NOW' : (wakeListening ? EAR_IDLE_TXT : 'EAR STARTING…')) : 'STANDBY');
   }
 }
-if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => {};
+if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = fillVoiceSelect;
+document.getElementById('voiceSelect').addEventListener('change', (e) => {
+  localStorage.setItem(VOICE_LS, e.target.value); // chosen voice wins from now on
+});
+document.getElementById('voiceTest').addEventListener('click', () => {
+  speak('Voice set, sir. How do I sound?');
+});
 
 /* ---------- SECURE UPLINK (neural core connection) ---------- */
 // Pages build marker — do not remove:
@@ -361,6 +398,7 @@ function getUplink() {
 function showUplink() {
   document.getElementById('upUrl').value = localStorage.getItem(UPLINK_LS_URL) || '';
   document.getElementById('upKey').value = ''; // never display the passphrase back
+  fillVoiceSelect(); // refresh the voice list every time the panel opens
   document.getElementById('uplink').classList.add('show');
   setStatus('UPLINK CONFIG');
 }
