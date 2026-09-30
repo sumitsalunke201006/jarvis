@@ -148,10 +148,14 @@
   #domainFlood { position: fixed; inset: 0; z-index: 90; pointer-events: none; opacity: 0;
     background: radial-gradient(ellipse at center, rgba(196,132,255,.95) 0%, rgba(124,44,220,.9) 45%, rgba(42,8,96,.95) 100%); }
   #domainFlash { position: fixed; inset: 0; z-index: 91; pointer-events: none; opacity: 0; background: #f6ecff; }
+  #domainFire { position: fixed; inset: 0; z-index: 92; pointer-events: none; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(255,110,20,.5) 80%, rgba(255,40,10,.85) 100%);
+    animation: fireFlick .16s infinite alternate; }
+  @keyframes fireFlick { from { filter: brightness(.8) saturate(1.1); } to { filter: brightness(1.25) saturate(1.45); } }
   /* while the domain is active, every DOM element except the 3D canvas + overlays clears away */
-  body > *:not(#scene):not(#domainFlood):not(#domainFlash):not(script):not(style) {
+  body > *:not(#scene):not(#domainFlood):not(#domainFlash):not(#domainFire):not(script):not(style) {
     transition: opacity .5s ease, filter .5s ease; }
-  body.domain-active > *:not(#scene):not(#domainFlood):not(#domainFlash):not(script):not(style) {
+  body.domain-active > *:not(#scene):not(#domainFlood):not(#domainFlash):not(#domainFire):not(script):not(style) {
     opacity: 0 !important; filter: blur(10px); pointer-events: none !important; }
 
   /* ---------- HUD SIDE PANELS (iPad rails + mobile) ---------- */
@@ -193,6 +197,7 @@
 <canvas id="scene"></canvas>
 <div id="domainFlood"></div>
 <div id="domainFlash"></div>
+<div id="domainFire"></div>
 
 <!-- BOOT SEQUENCE -->
 <div id="boot"><div id="bootlines"></div><div id="bootTap">▸ TAP TO WAKE AEGIS</div></div>
@@ -691,8 +696,132 @@ function makeFireOrb(colorHex) {
   grp.add(pts);
   const light = new THREE.PointLight(colorHex, 30, 26);
   grp.add(light);
-  return { grp, core, glow, pts, base, N };
+  return { grp, core, glow, pts, base, N, light };
 }
+/* ---------- DOMAIN EXPANSION: fire embers (additive sparks that rise like real fire) ---------- */
+const EMBER_N = 240;
+let emberTex = null;
+function makeEmberSystem() {
+  if (!emberTex) emberTex = radialSprite();
+  const pos = new Float32Array(EMBER_N * 3), col = new Float32Array(EMBER_N * 3);
+  const P = [];
+  for (let i = 0; i < EMBER_N; i++) P.push({ life: 0, max: 1, x: 0, y: -99, z: 0, vx: 0, vy: 0, vz: 0, r: 1, g: .5, b: .1 });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const m = new THREE.PointsMaterial({ size: 0.17, map: emberTex, vertexColors: true,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  const points = new THREE.Points(g, m);
+  points.frustumCulled = false;
+  return { points, P, cursor: 0 };
+}
+function emberSpawn(fx, x, y, z, r, g, b, spread, up) {
+  const e = fx.embers.P[fx.embers.cursor]; fx.embers.cursor = (fx.embers.cursor + 1) % EMBER_N;
+  e.x = x + (Math.random()-.5)*spread; e.y = y + (Math.random()-.5)*spread; e.z = z + (Math.random()-.5)*spread;
+  e.vx = (Math.random()-.5)*2.4; e.vz = (Math.random()-.5)*2.4; e.vy = up * (0.6 + Math.random()*1.4);
+  e.r = r; e.g = g; e.b = b; e.max = 0.7 + Math.random()*0.9; e.life = e.max;
+}
+function emberUpdate(fx, dt) {
+  const pos = fx.embers.points.geometry.attributes.position.array;
+  const col = fx.embers.points.geometry.attributes.color.array;
+  for (let i = 0; i < EMBER_N; i++) {
+    const e = fx.embers.P[i];
+    if (e.life > 0) {
+      e.life -= dt;
+      e.vy += 1.6 * dt; e.vx *= (1 - 0.9*dt); e.vz *= (1 - 0.9*dt);
+      e.x += e.vx*dt; e.y += e.vy*dt; e.z += e.vz*dt;
+      const k = Math.max(0, e.life / e.max);
+      pos[i*3]=e.x; pos[i*3+1]=e.y; pos[i*3+2]=e.z;
+      col[i*3]=e.r*k; col[i*3+1]=e.g*k; col[i*3+2]=e.b*k;
+    } else { pos[i*3+1] = -99; col[i*3]=col[i*3+1]=col[i*3+2]=0; }
+  }
+  fx.embers.points.geometry.attributes.position.needsUpdate = true;
+  fx.embers.points.geometry.attributes.color.needsUpdate = true;
+}
+
+/* ---------- DOMAIN EXPANSION: synthesized fire sounds (zero audio assets) ---------- */
+let domainAC = null, domainRumble = null;
+function dac() {
+  try {
+    if (!domainAC) domainAC = new (window.AudioContext || window.webkitAudioContext)();
+    if (domainAC.state === 'suspended') domainAC.resume();
+    return domainAC;
+  } catch (e) { return null; }
+}
+function noiseBuf(ac, secs) {
+  const b = ac.createBuffer(1, Math.floor(ac.sampleRate * secs), ac.sampleRate);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1;
+  return b;
+}
+function domainSound(kind) {
+  const ac = dac(); if (!ac) return;
+  try {
+    const t = ac.currentTime;
+    if (kind === 'charge') { // rising whoosh as the orbs converge
+      const src = ac.createBufferSource(); src.buffer = noiseBuf(ac, 1.6);
+      const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+      bp.frequency.setValueAtTime(280, t); bp.frequency.exponentialRampToValueAtTime(4200, t + 1.45);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 1.4);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.55);
+      src.connect(bp); bp.connect(g); g.connect(ac.destination);
+      src.start(t); src.stop(t + 1.6);
+      const riser = ac.createOscillator(); riser.type = 'sine';
+      riser.frequency.setValueAtTime(70, t); riser.frequency.exponentialRampToValueAtTime(330, t + 1.45);
+      const rg = ac.createGain(); rg.gain.setValueAtTime(0.0001, t);
+      rg.gain.exponentialRampToValueAtTime(0.12, t + 1.4); rg.gain.exponentialRampToValueAtTime(0.0001, t + 1.55);
+      riser.connect(rg); rg.connect(ac.destination); riser.start(t); riser.stop(t + 1.6);
+    } else if (kind === 'boom') { // collision: gritty explosion + sub drop
+      const src = ac.createBufferSource(); src.buffer = noiseBuf(ac, 1.0);
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(900, t); lp.frequency.exponentialRampToValueAtTime(90, t + 0.8);
+      const ws = ac.createWaveShaper();
+      const curve = new Float32Array(256);
+      for (let i = 0; i < 256; i++) { const x = i/128 - 1; curve[i] = Math.tanh(2.5*x); }
+      ws.curve = curve;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+      src.connect(lp); lp.connect(ws); ws.connect(g); g.connect(ac.destination);
+      src.start(t); src.stop(t + 1.0);
+      const drop = ac.createOscillator(); drop.type = 'sine';
+      drop.frequency.setValueAtTime(130, t); drop.frequency.exponentialRampToValueAtTime(27, t + 0.85);
+      const dg = ac.createGain(); dg.gain.setValueAtTime(0.8, t);
+      dg.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
+      drop.connect(dg); dg.connect(ac.destination); drop.start(t); drop.stop(t + 1.05);
+    } else if (kind === 'shimmer') { // eerie hollow-purple sustain
+      [880, 1318, 1760].forEach((f, i) => {
+        const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = f * (1 + (Math.random()-.5)*0.01);
+        const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.07, t + 0.35);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+        const lfo = ac.createOscillator(); lfo.frequency.value = 5 + i*1.7;
+        const lg = ac.createGain(); lg.gain.value = 0.035;
+        lfo.connect(lg); lg.connect(g.gain);
+        o.connect(g); g.connect(ac.destination);
+        o.start(t); o.stop(t + 2.3); lfo.start(t); lfo.stop(t + 2.3);
+      });
+    } else if (kind === 'rumble') { // deep bed while the flood holds
+      domainRumbleStop();
+      const src = ac.createBufferSource(); src.buffer = noiseBuf(ac, 2.5); src.loop = true;
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 110;
+      const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.22, t + 0.4);
+      src.connect(lp); lp.connect(g); g.connect(ac.destination); src.start(t);
+      domainRumble = { src, g };
+    }
+  } catch (e) { /* silence is acceptable — the cinematic never depends on audio */ }
+}
+function domainRumbleStop() {
+  if (!domainRumble || !domainAC) { domainRumble = null; return; }
+  try {
+    const t = domainAC.currentTime, r = domainRumble; domainRumble = null;
+    r.g.gain.cancelScheduledValues(t); r.g.gain.setValueAtTime(r.g.gain.value, t);
+    r.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    setTimeout(() => { try { r.src.stop(); } catch (e) {} }, 600);
+  } catch (e) { domainRumble = null; }
+}
+
 let domainFX = null;
 function playDomainExpansion() {
   if (domainFX) return;
@@ -710,7 +839,10 @@ function playDomainExpansion() {
   purple.grp.position.set(0, 0.6, 5); purple.grp.visible = false;
   purple.grp.scale.setScalar(0.01);
   scene3.add(purple.grp);
-  domainFX = { t: 0, blue, red, purple, rings: [], engaged: false, armourSet: false, flashV: 0, floodV: 0 };
+  domainFX = { t: 0, blue, red, purple, rings: [], engaged: false, armourSet: false, flashV: 0, floodV: 0, fireV: 0 };
+  domainFX.embers = makeEmberSystem();
+  scene3.add(domainFX.embers.points);
+  domainSound('charge');
   shake = Math.max(shake, 0.5);
 }
 function spawnDomainRing(colorHex, delay) {
@@ -732,6 +864,7 @@ function domainFlicker() { // quick purple blink on disengage
 function updateDomainFX(dt) {
   const fx = domainFX; if (!fx) return;
   fx.t += dt;
+  emberUpdate(fx, dt);
   const T = fx.t;
   const flick = (o, t) => {
     const p = o.pts.geometry.attributes.position.array;
@@ -742,8 +875,9 @@ function updateDomainFX(dt) {
       p[i*3+2] = b[2] + Math.sin(t*7 + i*0.9) * 0.16;
     }
     o.pts.geometry.attributes.position.needsUpdate = true;
-    o.core.scale.setScalar(1 + Math.sin(t*23) * 0.06);
+    o.core.scale.setScalar(1 + Math.sin(t*23) * 0.12);
     o.glow.material.opacity = 0.75 + Math.sin(t*17) * 0.15;
+    o.light.intensity = 30 + Math.sin(t*31) * 8 + Math.sin(t*57 + 1.3) * 5;
   };
   if (T < 1.5) {
     // converge: blue from right, red from left, accelerating inward
@@ -753,6 +887,11 @@ function updateDomainFX(dt) {
     fx.blue.grp.position.y = 0.6 + Math.sin(T*6) * 0.15;
     fx.red.grp.position.y = 0.6 + Math.cos(T*6) * 0.15;
     flick(fx.blue, T); flick(fx.red, T);
+    for (let i = 0; i < 3; i++) {
+      emberSpawn(fx, fx.blue.grp.position.x, fx.blue.grp.position.y, 5, 0.45, 0.65, 1, 0.7, 1.2);
+      emberSpawn(fx, fx.red.grp.position.x, fx.red.grp.position.y, 5, 1, 0.42, 0.12, 0.7, 1.2);
+    }
+    fx.fireV = Math.min(0.85, T / 1.5 * 0.85);
   } else {
     if (!fx.engaged) {
       fx.engaged = true;
@@ -762,9 +901,15 @@ function updateDomainFX(dt) {
       fx.purple.grp.visible = true;
       spawnDomainRing(0xf3e8ff, 0); spawnDomainRing(0xa855f7, 0.12); spawnDomainRing(0x6d28d9, 0.24);
       speak('Behold... Infinity Void. Hundred percent potential, sir.');
+      domainSound('boom'); domainSound('rumble');
+      fx.fireV = 1;
+      for (let i = 0; i < 130; i++) emberSpawn(fx, 0, 0.6, 5, 1, 0.55 + Math.random()*0.3, 0.15, 1.2, 2.2);
+      for (let i = 0; i < 40; i++) emberSpawn(fx, 0, 0.6, 5, 1, 0.95, 0.85, 0.8, 3.2);
     }
     const pt = T - 1.5;
     flick(fx.purple, T);
+    if (pt < 1.7) for (let i = 0; i < 2; i++)
+      emberSpawn(fx, (Math.random()-.5)*2, 0.6 + (Math.random()-.5)*2, 5, 0.75, 0.4, 1, 1.6, 1.0);
     const pop = Math.min(1, pt / 0.45);
     fx.purple.grp.scale.setScalar(Math.max(0.01,
       (0.01 + 1.65 * (1 - Math.pow(1 - pop, 3))) * (1 + Math.sin(T*10) * 0.05)));
@@ -778,7 +923,8 @@ function updateDomainFX(dt) {
     if (pt < 0.9) fx.floodV = pt / 0.9 * 0.93;
     else if (pt < 1.4) fx.floodV = 0.93;
     else fx.floodV = Math.max(0, 0.93 * (1 - (pt - 1.4) / 0.8));
-    if (pt >= 1.15 && !fx.armourSet) { fx.armourSet = true; setArmour(true); }
+    if (pt >= 1.15 && !fx.armourSet) { fx.armourSet = true; setArmour(true); domainSound('shimmer'); }
+    fx.fireV = Math.max(0, 1 - pt / 2.2);
     if (pt >= 1.7) { // dissolve into embers as the flood recedes
       const d = Math.min(1, (pt - 1.7) / 0.6);
       fx.purple.grp.scale.setScalar(Math.max(0.01, 1.7 * (1 - d)));
@@ -791,6 +937,8 @@ function updateDomainFX(dt) {
   const fl = document.getElementById('domainFlood'), fs = document.getElementById('domainFlash');
   if (fl) fl.style.opacity = fx.floodV.toFixed(3);
   if (fs) fs.style.opacity = fx.flashV.toFixed(3);
+  const fr = document.getElementById('domainFire');
+  if (fr) fr.style.opacity = (fx.fireV || 0).toFixed(3);
   if (T >= 3.8) {
     for (const o of [fx.blue, fx.red, fx.purple]) {
       scene3.remove(o.grp);
@@ -803,6 +951,8 @@ function updateDomainFX(dt) {
       });
     }
     for (const r of fx.rings) { scene3.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); }
+    if (fx.embers) { scene3.remove(fx.embers.points); fx.embers.points.geometry.dispose(); fx.embers.points.material.dispose(); }
+    domainRumbleStop();
     if (fl) fl.style.opacity = 0; if (fs) fs.style.opacity = 0;
     document.body.classList.remove('domain-active');
     domainFX = null;
