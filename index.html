@@ -66,6 +66,32 @@
     background: rgba(1,8,16,.55); border: 1px solid var(--cyan-dim); color: var(--cyan);
     padding: 10px 18px; cursor: pointer;
     clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+  #chatlogBtn { margin-bottom: 10px; margin-left: 8px; font-family: 'Orbitron', sans-serif; font-size: .58rem; letter-spacing: 3px;
+    background: rgba(1,8,16,.55); border: 1px solid var(--cyan-dim); color: var(--cyan);
+    padding: 10px 18px; cursor: pointer;
+    clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+
+  /* ---------- CHAT HISTORY ---------- */
+  #chatlog { position: fixed; inset: 0; background: rgba(1,4,9,.94); z-index: 60;
+    display: none; align-items: center; justify-content: center; padding: 24px; }
+  #chatlog.show { display: flex; }
+  #chatPanel { width: 100%; max-width: 430px; max-height: 82vh; display: flex; flex-direction: column;
+    border: 1px solid var(--cyan-dim); border-top: 2px solid var(--cyan); background: rgba(1,8,16,.96); padding: 22px 20px;
+    clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px); }
+  #chatList { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+    padding: 6px 2px; margin-bottom: 14px; min-height: 200px; }
+  .chat-day { text-align: center; font-size: .58rem; letter-spacing: 3px; opacity: .5; margin: 6px 0; }
+  .chat-msg { max-width: 88%; padding: 10px 12px; font-size: .82rem; line-height: 1.45; color: #eaf7ff;
+    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+  .chat-msg.levi { align-self: flex-start; background: rgba(16,58,92,.55); border: 1px solid var(--cyan-dim); }
+  .chat-msg.you { align-self: flex-end; background: rgba(58,42,8,.55); border: 1px solid rgba(255,200,87,.35); }
+  .chat-msg span { white-space: pre-wrap; word-break: break-word; }
+  .chat-meta { font-size: .58rem; letter-spacing: 2px; opacity: .55; margin-top: 6px; }
+  .chat-empty { text-align: center; opacity: .5; font-size: .8rem; line-height: 1.8; padding: 40px 0; }
+  #chatClear, #chatClose { flex: 1; font-family: 'Orbitron', sans-serif; font-size: .62rem; letter-spacing: 2px;
+    padding: 12px 0; cursor: pointer; }
+  #chatClear { background: transparent; border: 1px solid #ff7a4d; color: #ff7a4d; }
+  #chatClose { background: rgba(16,58,92,.6); border: 1px solid var(--cyan); color: #eaf7ff; }
 
   #typerow { display: flex; width: 100%; max-width: 520px; gap: 8px; }
   #textIn { flex: 1; background: rgba(1,8,16,.78); border: 1px solid var(--cyan-dim);
@@ -241,6 +267,19 @@
   </div>
 </div>
 
+<!-- CHAT HISTORY -->
+<div id="chatlog">
+  <div id="chatPanel">
+    <div class="up-title">CHAT HISTORY</div>
+    <div class="up-sub">CONVERSATION WITH LEVI · THIS DEVICE ONLY</div>
+    <div id="chatList"></div>
+    <div class="up-row">
+      <button id="chatClear">CLEAR</button>
+      <button id="chatClose">CLOSE</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONTROL DOCK -->
 <div id="dock">
   <div id="micwrap">
@@ -256,6 +295,7 @@
   </div>
   <button id="wakechip">◉ WAKE WORD : OFF</button>
   <button id="uplinkBtn" title="Uplink settings">⚙ UPLINK</button>
+  <button id="chatlogBtn" title="Chat history">▤ LOGS</button>
   <div id="typerow">
     <input id="textIn" placeholder="Type to LEVI..." autocomplete="off">
     <button id="send">SEND</button>
@@ -316,10 +356,21 @@ function stamp() { return new Date().toLocaleTimeString('en-IN', { hour: '2-digi
 let currentStatus = 'STANDBY';
 let quota = { remaining: null, limit: 60, resetSec: 0 }; // neural-core allowance, refreshed from response headers
 function setStatus(s) { currentStatus = s; drawStatus(); }
-const logEntries = []; // {who, text, ts} — rendered onto the 3D comms panel
+const logEntries = []; // {who, text, ts, day} — rendered onto the 3D comms panel
+const CHAT_LS = 'jarvis_chat_log'; // persistent chat history — stored only on this device
+try {
+  const savedChat = JSON.parse(localStorage.getItem(CHAT_LS) || '[]');
+  if (Array.isArray(savedChat)) for (const e of savedChat.slice(-200)) {
+    if (e && typeof e.text === 'string')
+      logEntries.push({ who: e.who === 'you' ? 'you' : 'jarvis', text: e.text.slice(0, 2000),
+        ts: String(e.ts || ''), day: String(e.day || '') });
+  }
+} catch (e) { /* storage unavailable — history just won't persist */ }
+function saveChat() { try { localStorage.setItem(CHAT_LS, JSON.stringify(logEntries.slice(-200))); } catch (e) {} }
 function addLog(who, text) {
-  logEntries.push({ who, text, ts: stamp() });
-  while (logEntries.length > 24) logEntries.shift();
+  logEntries.push({ who, text, ts: stamp(), day: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) });
+  while (logEntries.length > 200) logEntries.shift();
+  saveChat();
   drawLog();
 }
 
@@ -432,6 +483,44 @@ function showUplink() {
   setStatus('UPLINK CONFIG');
 }
 function hideUplink() { document.getElementById('uplink').classList.remove('show'); }
+
+/* ---------- CHAT HISTORY VIEW ---------- */
+function renderChatLog() {
+  const list = document.getElementById('chatList');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!logEntries.length) {
+    list.innerHTML = '<div class="chat-empty">No conversation yet, sir.<br>Your chats with LEVI will appear here.</div>';
+    return;
+  }
+  let lastDay = '';
+  for (const e of logEntries) {
+    if (e.day && e.day !== lastDay) {
+      lastDay = e.day;
+      const d = document.createElement('div');
+      d.className = 'chat-day'; d.textContent = e.day;
+      list.appendChild(d);
+    }
+    const b = document.createElement('div');
+    b.className = 'chat-msg ' + (e.who === 'you' ? 'you' : 'levi');
+    const txt = document.createElement('span'); txt.textContent = e.text;
+    const meta = document.createElement('div'); meta.className = 'chat-meta';
+    meta.textContent = (e.who === 'you' ? 'YOU' : 'LEVI') + (e.ts ? ' · ' + e.ts : '');
+    b.appendChild(txt); b.appendChild(meta);
+    list.appendChild(b);
+  }
+  list.scrollTop = list.scrollHeight;
+}
+function showChatLog() { renderChatLog(); document.getElementById('chatlog').classList.add('show'); }
+function hideChatLog() { document.getElementById('chatlog').classList.remove('show'); }
+document.getElementById('chatlogBtn').addEventListener('click', showChatLog);
+document.getElementById('chatClose').addEventListener('click', hideChatLog);
+document.getElementById('chatClear').addEventListener('click', () => {
+  if (!confirm('Erase all chat history on this device?')) return;
+  logEntries.length = 0; convoHistory.length = 0;
+  try { localStorage.removeItem(CHAT_LS); localStorage.removeItem(CONVO_LS); } catch (e) {}
+  drawLog(); renderChatLog();
+});
 document.getElementById('upSave').addEventListener('click', () => {
   const url = document.getElementById('upUrl').value.trim().replace(/\/+$/, '');
   const key = document.getElementById('upKey').value.trim();
@@ -670,7 +759,14 @@ document.getElementById('upTest').addEventListener('click', async () => {
 });
 
 /* ---------- BRAIN: neural core (backend) ---------- */
+const CONVO_LS = 'jarvis_convo'; // brain context that survives reloads — stored only on this device
 let convoHistory = []; // last 5 exchanges (10 entries), kept client-side only
+try {
+  const savedConvo = JSON.parse(localStorage.getItem(CONVO_LS) || '[]');
+  if (Array.isArray(savedConvo))
+    convoHistory = savedConvo.filter(e => e && (e.role === 'user' || e.role === 'assistant') && typeof e.content === 'string').slice(-10);
+} catch (e) {}
+function saveConvo() { try { localStorage.setItem(CONVO_LS, JSON.stringify(convoHistory.slice(-10))); } catch (e) {} }
 let lastBrainReply = ''; // last spoken answer — used by "save that in ... notebook"
 async function askBrain(raw) {
   const cfg = getUplink();
@@ -702,6 +798,7 @@ async function askBrain(raw) {
     convoHistory.push({ role: 'user', content: raw.slice(0, 500) });
     convoHistory.push({ role: 'assistant', content: reply.slice(0, 500) });
     while (convoHistory.length > 10) convoHistory.shift();
+    saveConvo();
     document.body.classList.remove('thinking');
     speak(reply, emotionVoice(data && data.emotion)); // perform the reply's feeling
   } catch (e) {
