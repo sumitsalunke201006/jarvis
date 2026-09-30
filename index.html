@@ -143,6 +143,49 @@
 
   #glfail { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center;
     background: #010409; color: var(--cyan); padding: 30px; text-align: center; font-size: .8rem; line-height: 2; }
+
+  /* ---------- HUD SIDE PANELS (iPad rails + mobile) ---------- */
+  #dayBrief { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 60;
+    max-width: 94vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: .62rem; letter-spacing: 2px; color: #9fdcff;
+    background: rgba(1,10,20,.72); border: 1px solid var(--cyan-dim); border-radius: 999px;
+    padding: 8px 20px; backdrop-filter: blur(6px); }
+  #dayBrief[hidden], #cmdDeck[hidden], #livePanels[hidden],
+  #mobileDeck[hidden], #todaySheet[hidden] { display: none; }
+  #cmdDeck { position: fixed; left: 18px; top: 50%; transform: translateY(-50%); z-index: 60; width: 200px; }
+  .rail-title { font-family: 'Orbitron', sans-serif; font-size: .62rem; letter-spacing: 4px; color: var(--cyan);
+    text-shadow: 0 0 12px var(--cyan); margin-bottom: 10px; }
+  #cmdDeckBtns { display: flex; flex-direction: column; gap: 8px; }
+  .cmd-chip { font-family: 'Orbitron', sans-serif; font-size: .58rem; letter-spacing: 2px; text-align: left;
+    padding: 11px 12px; cursor: pointer; color: #d7eefb; background: rgba(1,10,20,.72);
+    border: 1px solid var(--cyan-dim); border-left: 2px solid var(--cyan); transition: background .15s; }
+  .cmd-chip:active { background: rgba(70,216,255,.18); }
+  #livePanels { position: fixed; right: 18px; top: 50%; transform: translateY(-50%); z-index: 60;
+    width: 302px; display: flex; flex-direction: column; gap: 14px; }
+  .hud-card { background: rgba(1,10,20,.72); border: 1px solid var(--cyan-dim); border-top: 2px solid var(--cyan);
+    padding: 12px 14px; backdrop-filter: blur(6px);
+    clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px); }
+  .rail-list { display: flex; flex-direction: column; gap: 6px; max-height: 32vh; overflow-y: auto;
+    font-size: .68rem; line-height: 1.5; color: #cfeeff; }
+  .rail-item { border-left: 2px solid var(--cyan-dim); background: rgba(70,216,255,.05);
+    padding: 7px 10px; border-radius: 0 6px 6px 0; }
+  .rail-item button { all: unset; cursor: pointer; display: block; width: 100%; }
+  .rail-item .ri-sub { display: block; opacity: .55; font-size: .6rem; }
+  .rail-empty { opacity: .5; font-size: .64rem; }
+  #mobileDeck { position: fixed; left: 0; right: 0; bottom: 132px; z-index: 60; }
+  #mobileDeckBtns { display: flex; gap: 8px; overflow-x: auto; padding: 6px 14px; scrollbar-width: none; }
+  #mobileDeckBtns::-webkit-scrollbar { display: none; }
+  #mobileDeckBtns .cmd-chip { white-space: nowrap; border-left-width: 1px; flex-shrink: 0; }
+  #todaySheet { position: fixed; left: 12px; right: 12px; bottom: 132px; z-index: 61; max-height: 46vh;
+    overflow-y: auto; background: rgba(1,10,20,.96); border: 1px solid var(--cyan-dim);
+    border-top: 2px solid var(--cyan); padding: 14px 16px;
+    clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px); }
+  .sheet-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+    font-family: 'Orbitron', sans-serif; font-size: .66rem; letter-spacing: 4px; color: #eaf7ff; }
+  #sheetClose { background: transparent; border: 1px solid var(--cyan-dim); color: var(--cyan);
+    width: 28px; height: 28px; cursor: pointer; }
+  #todaySheet .rail-title { margin-top: 12px; }
+  #todaySheet .rail-title:first-of-type { margin-top: 0; }
 </style>
 </head>
 <body>
@@ -201,6 +244,23 @@
     <button id="send">SEND</button>
   </div>
   <div id="dockhint">LONG-PRESS CORE · UPLINK</div>
+</div>
+
+<!-- DAY BRIEF + SIDE PANELS -->
+<div id="dayBrief" hidden><span id="dayBriefText">STANDBY</span></div>
+<nav id="cmdDeck" aria-label="Quick commands" hidden>
+  <div class="rail-title">COMMAND DECK</div>
+  <div id="cmdDeckBtns"></div>
+</nav>
+<aside id="livePanels" hidden>
+  <section class="hud-card"><div class="rail-title">TODAY</div><div id="agendaList" class="rail-list"></div></section>
+  <section class="hud-card"><div class="rail-title">INBOX</div><div id="inboxList" class="rail-list"></div></section>
+</aside>
+<div id="mobileDeck" hidden><div id="mobileDeckBtns"></div></div>
+<div id="todaySheet" hidden>
+  <div class="sheet-head"><span>DAY OVERVIEW</span><button id="sheetClose" aria-label="Close">✕</button></div>
+  <div class="rail-title">AGENDA</div><div id="mAgendaList" class="rail-list"></div>
+  <div class="rail-title">INBOX</div><div id="mInboxList" class="rail-list"></div>
 </div>
 
 <!-- NOTEBOOK PANEL -->
@@ -645,6 +705,119 @@ function launchApp(name) {
     f.src = scheme; // silent no-op if the app isn't installed
     setTimeout(() => f.remove(), 2500);
   } catch (e) { /* pill remains the fallback */ }
+}
+
+/* ---------- HUD SIDE PANELS (real data only — agenda, inbox, day brief) ---------- */
+const QUICK_COMMANDS = [
+  ['✉ CHECK MAIL', 'check my mail'],
+  ['📅 AGENDA', "what's on my calendar today"],
+  ['📨 READ LATEST', 'read my latest email'],
+  ['▶ OPEN VLC', 'open vlc'],
+  ['▶ OPEN YOUTUBE', 'open youtube'],
+  ['⏰ REMINDERS', 'list my reminders'],
+];
+function renderChips() {
+  for (const id of ['cmdDeckBtns', 'mobileDeckBtns']) {
+    const box = document.getElementById(id);
+    if (!box) continue;
+    box.innerHTML = '';
+    if (id === 'mobileDeckBtns') {
+      const t = document.createElement('button');
+      t.className = 'cmd-chip'; t.textContent = '▤ TODAY';
+      t.onclick = () => { document.getElementById('todaySheet').hidden = false; };
+      box.appendChild(t);
+    }
+    for (const [label, cmd] of QUICK_COMMANDS) {
+      const b = document.createElement('button');
+      b.className = 'cmd-chip'; b.textContent = label;
+      b.onclick = () => handleCommand(cmd);
+      box.appendChild(b);
+    }
+  }
+  document.getElementById('sheetClose').onclick = () => { document.getElementById('todaySheet').hidden = true; };
+}
+async function brainGet(path, params) { // quiet authed GET — never speaks, never pops panels
+  const cfg = getUplink();
+  if (!cfg || !cfg.url || !cfg.key) return null;
+  try {
+    const r = await fetch(cfg.url + path + '?' + new URLSearchParams(params || {}),
+      { headers: { 'x-jarvis-key': cfg.key } });
+    return await r.json();
+  } catch (e) { return null; }
+}
+function fmtClockShort(iso) {
+  const d = new Date(iso); let h = d.getHours(), ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+  return h + (d.getMinutes() ? ':' + String(d.getMinutes()).padStart(2, '0') : '') + ' ' + ap;
+}
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+function renderAgenda(elId, cal) {
+  const box = document.getElementById(elId); if (!box) return;
+  if (!cal) { box.innerHTML = '<div class="rail-empty">Uplink not configured.</div>'; return; }
+  if (!cal.ok) { box.innerHTML = '<div class="rail-empty">' + escHtml(cal.reply || 'Calendar not connected.') + '</div>'; return; }
+  const evs = cal.events || [];
+  if (!evs.length) { box.innerHTML = '<div class="rail-empty">Nothing scheduled — a clear field, sir.</div>'; return; }
+  box.innerHTML = evs.map(v => '<div class="rail-item">' + escHtml(v.summary) +
+    '<span class="ri-sub">' + escHtml(fmtClockShort(v.start)) + '</span></div>').join('');
+}
+function renderInbox(elId, mail) {
+  const box = document.getElementById(elId); if (!box) return;
+  if (!mail) { box.innerHTML = '<div class="rail-empty">Uplink not configured.</div>'; return; }
+  if (!mail.ok) { box.innerHTML = '<div class="rail-empty">' + escHtml(mail.reply || 'Gmail not connected.') + '</div>'; return; }
+  const ms = mail.messages || [];
+  if (!ms.length) { box.innerHTML = '<div class="rail-empty">Inbox zero. Beautiful.</div>'; return; }
+  box.innerHTML = '';
+  ms.forEach(m => {
+    const d = document.createElement('div'); d.className = 'rail-item';
+    const b = document.createElement('button');
+    const strong = document.createElement('span'); strong.textContent = shortFrom(m.from);
+    const sub = document.createElement('span'); sub.className = 'ri-sub'; sub.textContent = m.subject || 'no subject';
+    b.appendChild(strong); b.appendChild(sub);
+    b.onclick = () => readMailById(m.id);
+    d.appendChild(b); box.appendChild(d);
+  });
+}
+async function readMailById(id) {
+  setStatus('READING MAIL');
+  const j = await brainGet('/api/gmail/read', { id });
+  if (!j || !j.ok || !j.message) { speak('I could not open that email, sir.'); return; }
+  const m = j.message;
+  speak('From ' + shortFrom(m.from) + '. Subject: ' + (m.subject || 'no subject') + '. ' +
+    (String(m.body || '').slice(0, 600) || 'The body came through empty, sir.'));
+}
+async function refreshPanels() {
+  const s = new Date(); s.setHours(0, 0, 0, 0);
+  const e = new Date(s); e.setDate(e.getDate() + 1);
+  const [cal, mail] = await Promise.all([
+    brainGet('/api/calendar/events', { timeMin: isoLocal(s), timeMax: isoLocal(e), max: '8' }),
+    brainGet('/api/gmail/unread', { max: '5' }),
+  ]);
+  renderAgenda('agendaList', cal); renderAgenda('mAgendaList', cal);
+  renderInbox('inboxList', mail); renderInbox('mInboxList', mail);
+  const cfg = getUplink();
+  const dstr = new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+  let brief;
+  if (!cfg) brief = dstr + ' · UPLINK NOT CONFIGURED — OPEN UPLINK';
+  else {
+    const evs = (cal && cal.ok && cal.events) || [];
+    const unread = (mail && mail.ok && (mail.messages || []).length) || 0;
+    const remCount = (typeof reminders !== 'undefined' ? reminders : []).filter(r => r.fireAt > Date.now()).length;
+    brief = dstr + ' · ' + evs.length + ' event' + (evs.length === 1 ? '' : 's') +
+      ' · ' + unread + ' unread';
+    if (remCount) brief += ' · ' + remCount + ' reminder' + (remCount === 1 ? '' : 's');
+    if (evs.length) brief += ' · next: ' + evs[0].summary + ' ' + fmtClockShort(evs[0].start);
+  }
+  document.getElementById('dayBriefText').textContent = brief;
+}
+function layoutHudRails() {
+  const wide = matchMedia('(min-width: 1100px)').matches;
+  const $ = (id) => document.getElementById(id);
+  $('dayBrief').hidden = false;
+  $('cmdDeck').hidden = !wide;
+  $('livePanels').hidden = !wide;
+  $('mobileDeck').hidden = wide;
+  if (wide) $('todaySheet').hidden = true;
 }
 function handleCommand(raw) {
   const t = raw.toLowerCase().trim();
@@ -1677,6 +1850,9 @@ function bootGreeting() {
   return `Systems online. Good ${part}, ${BOSS}. JARVIS at your service.`;
 }
 window.addEventListener('load', () => {
+  renderChips(); layoutHudRails(); refreshPanels();
+  setInterval(refreshPanels, 90000); // keep agenda/inbox/brief fresh
+  matchMedia('(min-width: 1100px)').addEventListener('change', layoutHudRails);
   const box = document.getElementById('bootlines');
   const boot = document.getElementById('boot');
   const tap = document.getElementById('bootTap');
