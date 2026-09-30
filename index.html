@@ -144,6 +144,16 @@
   #glfail { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center;
     background: #010409; color: var(--cyan); padding: 30px; text-align: center; font-size: .8rem; line-height: 2; }
 
+  /* ---------- DOMAIN EXPANSION cinematic overlays ---------- */
+  #domainFlood { position: fixed; inset: 0; z-index: 90; pointer-events: none; opacity: 0;
+    background: radial-gradient(ellipse at center, rgba(196,132,255,.95) 0%, rgba(124,44,220,.9) 45%, rgba(42,8,96,.95) 100%); }
+  #domainFlash { position: fixed; inset: 0; z-index: 91; pointer-events: none; opacity: 0; background: #f6ecff; }
+  /* while the domain is active, every DOM element except the 3D canvas + overlays clears away */
+  body > *:not(#scene):not(#domainFlood):not(#domainFlash):not(script):not(style) {
+    transition: opacity .5s ease, filter .5s ease; }
+  body.domain-active > *:not(#scene):not(#domainFlood):not(#domainFlash):not(script):not(style) {
+    opacity: 0 !important; filter: blur(10px); pointer-events: none !important; }
+
   /* ---------- HUD SIDE PANELS (iPad rails + mobile) ---------- */
   #dayBrief { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 60;
     max-width: 94vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -181,6 +191,8 @@
 <body>
 
 <canvas id="scene"></canvas>
+<div id="domainFlood"></div>
+<div id="domainFlash"></div>
 
 <!-- BOOT SEQUENCE -->
 <div id="boot"><div id="bootlines"></div><div id="bootTap">▸ TAP TO WAKE JARVIS</div></div>
@@ -272,10 +284,11 @@ import * as THREE from 'three';
    All brain wiring preserved: wake word, neural uplink, armour/ARISE,
    secure uplink panel, local commands. The DISPLAY is now fully 3D.
    ===================================================================== */
-/* ================= ARMOUR TRIGGER PHRASES — ONE-EDIT SWAP =================
-   "protocol arise" / "arise" is the user's secret max-performance code word.
-   Plain text, case-insensitive substring match — no regex escaping needed. */
-const ARMOUR_ON_PHRASES = ["protocol arise", "arise", "armour up", "suit up", "full power"];
+/* ================= DOMAIN TRIGGER PHRASES — ONE-EDIT SWAP =================
+   "domain expansion" is the user's secret max-potential code word (Gojo style:
+   blue fire + red fire converge into Hollow Purple). Plain text,
+   case-insensitive substring match — no regex escaping needed. */
+const ARMOUR_ON_PHRASES = ["domain expansion", "hollow purple", "armour up", "suit up", "full power"];
 const ARMOUR_OFF_PHRASES = ["shut down", "shutdown", "stand down", "armour off", "power down", "normal mode"];
 /* =============== end armour trigger phrases =============== */
 const micBtn = document.getElementById('mic');
@@ -640,6 +653,162 @@ function setArmour(on) {
   else powerTone(false);
 }
 
+/* ---------- DOMAIN EXPANSION: Hollow Purple cinematic ----------
+   "domain expansion" → blue fire orb sweeps in from the right, red fire orb
+   from the left; they collide at center and become Hollow Purple, the screen
+   floods purple while all UI clears away, then max-potential mode engages. */
+let domainGlowTex = null;
+function radialSprite() {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.4, 'rgba(255,255,255,.55)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+}
+function makeFireOrb(colorHex) {
+  const grp = new THREE.Group();
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.55, 24, 18),
+    new THREE.MeshBasicMaterial({ color: colorHex }));
+  grp.add(core);
+  if (!domainGlowTex) domainGlowTex = radialSprite();
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: domainGlowTex, color: colorHex,
+    transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  glow.scale.set(4.4, 4.4, 1);
+  grp.add(glow);
+  const N = 46, pos = new Float32Array(N * 3), base = [];
+  for (let i = 0; i < N; i++) {
+    const r = 0.7 + Math.random() * 1.6, th = Math.random() * Math.PI * 2,
+      ph = Math.acos(2 * Math.random() - 1);
+    base.push([r * Math.sin(ph) * Math.cos(th), r * Math.sin(ph) * Math.sin(th), r * Math.cos(ph)]);
+  }
+  const pg = new THREE.BufferGeometry();
+  pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(pg, new THREE.PointsMaterial({ color: colorHex, size: 0.22,
+    map: domainGlowTex, transparent: true, opacity: 0.95,
+    blending: THREE.AdditiveBlending, depthWrite: false }));
+  grp.add(pts);
+  const light = new THREE.PointLight(colorHex, 30, 26);
+  grp.add(light);
+  return { grp, core, glow, pts, base, N };
+}
+let domainFX = null;
+function playDomainExpansion() {
+  if (domainFX) return;
+  if (!threeOK || reducedMotion) { // graceful: no 3D, still engage
+    setArmour(true);
+    speak('Hollow Purple. Full potential engaged, sir.');
+    return;
+  }
+  document.body.classList.add('domain-active'); // UI clears away
+  const blue = makeFireOrb(0x2a6bff); // cursed technique lapse: blue, from the right
+  const red = makeFireOrb(0xff2a44);  // cursed technique reversal: red, from the left
+  blue.grp.position.set(8, 0.6, 5); red.grp.position.set(-8, 0.6, 5);
+  scene3.add(blue.grp, red.grp);
+  const purple = makeFireOrb(0xa855f7); // hollow purple — born at the collision
+  purple.grp.position.set(0, 0.6, 5); purple.grp.visible = false;
+  purple.grp.scale.setScalar(0.01);
+  scene3.add(purple.grp);
+  domainFX = { t: 0, blue, red, purple, rings: [], engaged: false, armourSet: false, flashV: 0, floodV: 0 };
+  shake = Math.max(shake, 0.5);
+}
+function spawnDomainRing(colorHex, delay) {
+  const mesh = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.06, 72),
+    new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.9,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+  mesh.position.set(0, 0.6, 5);
+  mesh.visible = false;
+  scene3.add(mesh);
+  domainFX.rings.push({ mesh, t: -delay });
+}
+function domainFlicker() { // quick purple blink on disengage
+  const fs = document.getElementById('domainFlash');
+  if (!fs) return;
+  fs.style.transition = 'opacity .45s ease'; fs.style.opacity = 0.55;
+  setTimeout(() => { fs.style.opacity = 0; }, 60);
+  setTimeout(() => { fs.style.transition = ''; }, 650);
+}
+function updateDomainFX(dt) {
+  const fx = domainFX; if (!fx) return;
+  fx.t += dt;
+  const T = fx.t;
+  const flick = (o, t) => {
+    const p = o.pts.geometry.attributes.position.array;
+    for (let i = 0; i < o.N; i++) {
+      const b = o.base[i];
+      p[i*3]   = b[0] + Math.sin(t*9 + i*1.7) * 0.16;
+      p[i*3+1] = b[1] + Math.cos(t*11 + i*2.3) * 0.16;
+      p[i*3+2] = b[2] + Math.sin(t*7 + i*0.9) * 0.16;
+    }
+    o.pts.geometry.attributes.position.needsUpdate = true;
+    o.core.scale.setScalar(1 + Math.sin(t*23) * 0.06);
+    o.glow.material.opacity = 0.75 + Math.sin(t*17) * 0.15;
+  };
+  if (T < 1.5) {
+    // converge: blue from right, red from left, accelerating inward
+    const e = Math.pow(Math.min(1, T / 1.5), 1.7);
+    fx.blue.grp.position.x = 8 * (1 - e);
+    fx.red.grp.position.x = -8 * (1 - e);
+    fx.blue.grp.position.y = 0.6 + Math.sin(T*6) * 0.15;
+    fx.red.grp.position.y = 0.6 + Math.cos(T*6) * 0.15;
+    flick(fx.blue, T); flick(fx.red, T);
+  } else {
+    if (!fx.engaged) {
+      fx.engaged = true;
+      fx.flashV = 1; // collision flash
+      shake = 1.6;
+      scene3.remove(fx.blue.grp, fx.red.grp);
+      fx.purple.grp.visible = true;
+      spawnDomainRing(0xf3e8ff, 0); spawnDomainRing(0xa855f7, 0.12); spawnDomainRing(0x6d28d9, 0.24);
+      speak('Hollow Purple. Full potential engaged, sir.');
+    }
+    const pt = T - 1.5;
+    flick(fx.purple, T);
+    const pop = Math.min(1, pt / 0.45);
+    fx.purple.grp.scale.setScalar(Math.max(0.01,
+      (0.01 + 1.65 * (1 - Math.pow(1 - pop, 3))) * (1 + Math.sin(T*10) * 0.05)));
+    for (const r of fx.rings) {
+      r.t += dt;
+      if (r.t < 0) continue;
+      r.mesh.visible = true;
+      r.mesh.scale.setScalar(1 + r.t * 14);
+      r.mesh.material.opacity = Math.max(0, 0.9 * (1 - r.t / 1.1));
+    }
+    if (pt < 0.9) fx.floodV = pt / 0.9 * 0.93;
+    else if (pt < 1.4) fx.floodV = 0.93;
+    else fx.floodV = Math.max(0, 0.93 * (1 - (pt - 1.4) / 0.8));
+    if (pt >= 1.15 && !fx.armourSet) { fx.armourSet = true; setArmour(true); }
+    if (pt >= 1.7) { // dissolve into embers as the flood recedes
+      const d = Math.min(1, (pt - 1.7) / 0.6);
+      fx.purple.grp.scale.setScalar(Math.max(0.01, 1.7 * (1 - d)));
+      fx.purple.pts.material.opacity = 0.95 * (1 - d);
+      fx.purple.glow.material.opacity = 0.9 * (1 - d);
+    }
+    if (T >= 3.0) document.body.classList.remove('domain-active'); // UI fades back in
+  }
+  fx.flashV = Math.max(0, fx.flashV - dt * 2.2);
+  const fl = document.getElementById('domainFlood'), fs = document.getElementById('domainFlash');
+  if (fl) fl.style.opacity = fx.floodV.toFixed(3);
+  if (fs) fs.style.opacity = fx.flashV.toFixed(3);
+  if (T >= 3.8) {
+    for (const o of [fx.blue, fx.red, fx.purple]) {
+      scene3.remove(o.grp);
+      o.grp.traverse((m) => {
+        if (m.geometry) m.geometry.dispose();
+        if (m.material) {
+          if (m.material.map && m.material.map !== domainGlowTex) m.material.map.dispose();
+          m.material.dispose();
+        }
+      });
+    }
+    for (const r of fx.rings) { scene3.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); }
+    if (fl) fl.style.opacity = 0; if (fs) fs.style.opacity = 0;
+    document.body.classList.remove('domain-active');
+    domainFX = null;
+  }
+}
+
 /* ---------- COMMANDS: instant device actions stay local, everything else -> neural core ---------- */
 /* ---------- Open apps (Siri-style, via URL schemes) ----------
    A web page cannot launch apps with system privileges, so this fires each app's
@@ -796,14 +965,17 @@ function handleCommand(raw) {
   const hitOn = matchesAny(t, ARMOUR_ON_PHRASES);
   const hitOff = matchesAny(t, ARMOUR_OFF_PHRASES);
   if (hitOn && !hitOff) {
-    const protocol = t.includes('arise');
-    if (!armourMode) { setArmour(true); speak(protocol ? 'Protocol ARISE acknowledged, sir. All systems at maximum.' : 'Armour online, sir. Full potential engaged.'); }
-    else speak(protocol ? 'Protocol ARISE is already active, sir.' : 'Armour is already online, sir.');
+    const domain = t.includes('domain expansion') || t.includes('hollow purple');
+    if (!armourMode) {
+      if (domain) playDomainExpansion(); // cinematic ends in Hollow Purple max-potential
+      else { setArmour(true); speak('Armour online, sir. Full potential engaged.'); }
+    }
+    else speak(domain ? 'Hollow Purple is already active, sir.' : 'Armour is already online, sir.');
     return;
   }
   if (hitOff) {
-    if (armourMode) { setArmour(false); speak('Armour disengaged, sir.'); }
-    else speak('Armour is already offline, sir.');
+    if (armourMode) { setArmour(false); domainFlicker(); speak('Hollow Purple disengaged, sir.'); }
+    else speak('Hollow Purple is already offline, sir.');
     return;
   }
   /* Google Calendar — handled locally, no neural-core call needed.
@@ -1187,10 +1359,10 @@ try {
 } catch (e) { threeOK = false; }
 if (!threeOK) document.getElementById('glfail').style.display = 'flex';
 
-/* palette + ARISE state (0 = calm cyan, 1 = arise red/orange) */
+/* palette + HOLLOW PURPLE state (0 = calm cyan, 1 = hollow purple) */
 const COL = {
-  calmMain: new THREE.Color(0x46d8ff), ariseMain: new THREE.Color(0xff5a3c),
-  calmCore: new THREE.Color(0xd8f4ff), ariseCore: new THREE.Color(0xffd9a8),
+  calmMain: new THREE.Color(0x46d8ff), ariseMain: new THREE.Color(0xa855f7),
+  calmCore: new THREE.Color(0xd8f4ff), ariseCore: new THREE.Color(0xe9d5ff),
   amber: new THREE.Color(0xffc857),
 };
 let ariseT = 0, ariseTarget = 0;
@@ -1709,7 +1881,7 @@ function animate() {
   const fov = 55 + e * 11;
   if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
 
-  /* palette shift cyan → red/orange */
+  /* palette shift cyan → hollow purple */
   for (const tm of tintMats) {
     if (tm.kind === 'main') mixMain(tm.m.color);
     else tm.m.color.copy(COL.calmCore).lerp(COL.ariseCore, ariseT);
@@ -1799,6 +1971,9 @@ function animate() {
 
   /* next-reminder countdown ring */
   updateCountdown(t);
+
+  /* domain expansion cinematic */
+  updateDomainFX(dt);
 
   renderer.render(scene3, camera);
 }
