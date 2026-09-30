@@ -7,8 +7,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="KAIROS">
-<title>KAIROS</title>
+<meta name="apple-mobile-web-app-title" content="LEVI">
+<title>LEVI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -201,7 +201,7 @@
 <canvas id="scene"></canvas>
 <div id="domainFlash"></div>
 <div id="domainFire"></div>
-<div id="potentialPill">KAIROS // 100% POTENTIAL</div>
+<div id="potentialPill">LEVI // 100% POTENTIAL</div>
 
 <!-- BOOT SEQUENCE -->
 <div id="boot"><div id="bootlines"></div></div>
@@ -230,7 +230,7 @@
       <span id="gmailStatus" class="up-result" style="flex:1">Not checked.</span>
       <button id="gmailConnect">CONNECT GOOGLE</button>
     </div>
-    <div class="up-note">Gmail: KAIROS reads mail — never sends, never deletes.<br>Calendar: reads your day, creates events on command.<br>Google may ask you to sign in again about once a week.</div>
+    <div class="up-note">Gmail: LEVI reads mail — never sends, never deletes.<br>Calendar: reads your day, creates events on command.<br>Google may ask you to sign in again about once a week.</div>
     <div class="up-sub" style="margin-top:18px">VOICE</div>
     <div class="up-row" style="align-items:center">
       <select id="voiceSelect" style="flex:3; min-width:0"></select>
@@ -245,7 +245,7 @@
 <div id="dock">
   <div id="micwrap">
     <div class="ripple"></div><div class="ripple d2"></div>
-    <button id="mic" title="Talk to KAIROS">
+    <button id="mic" title="Talk to LEVI">
       <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
         <rect x="9" y="2.5" width="6" height="11" rx="3"/>
         <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/>
@@ -257,7 +257,7 @@
   <button id="wakechip">◉ WAKE WORD : OFF</button>
   <button id="uplinkBtn" title="Uplink settings">⚙ UPLINK</button>
   <div id="typerow">
-    <input id="textIn" placeholder="Type to KAIROS..." autocomplete="off">
+    <input id="textIn" placeholder="Type to LEVI..." autocomplete="off">
     <button id="send">SEND</button>
   </div>
   <div id="dockhint">LONG-PRESS CORE · UPLINK</div>
@@ -295,7 +295,7 @@
 <script type="module">
 import * as THREE from 'three';
 /* =====================================================================
-   KAIROS v5 — full-screen 3D immersive HUD.
+   LEVI v5 — full-screen 3D immersive HUD.
    All brain wiring preserved: wake word, neural uplink, armour/ARISE,
    secure uplink panel, local commands. The DISPLAY is now fully 3D.
    ===================================================================== */
@@ -941,8 +941,8 @@ let domainFX = null;
    "Domain Expansion." → the interface goes silent and dark, a blue sphere
    materializes LEFT and a purple sphere RIGHT; they hover, then SUDDENLY
    accelerate and collide at the center → the screen becomes the INFINITY VOID
-   (deep purple deep-space, geometric structures, the words appear as Kairos
-   speaks them calmly) → the void collapses into KAIROS // 100% POTENTIAL. */
+   (deep purple deep-space, geometric structures, the words appear as Levi
+   speaks them calmly) → the void collapses into LEVI // 100% POTENTIAL. */
 function makeVoid() {
   // deep-space void: far geometric structures, a breathing void-heart,
   // glowing atmospheric layers, slow-drifting motes. Enormous, calm, majestic.
@@ -1161,13 +1161,13 @@ function updateDomainFX(dt) {
       r.mesh.scale.setScalar(1 + r.t * 16);
       r.mesh.material.opacity = Math.max(0, 0.9 * (1 - r.t / 1.2));
     }
-    if (pt >= 1.0 && !fx.voiceDone) { // Kairos speaks into the void — calm, deep, controlled
+    if (pt >= 1.0 && !fx.voiceDone) { // Levi speaks into the void — calm, deep, controlled
       fx.voiceDone = true;
       speak('Infinity Void. Hundred percent potential, sir.', { rate: 0.85, pitch: 0.6 }); // never shouting
       domainSound('voidDrone');
     }
     if (pt >= 2.4) {
-      // PHASE 4 — the void rapidly collapses into the Kairos interface
+      // PHASE 4 — the void rapidly collapses into the Levi interface
       const c = Math.min(1, (pt - 2.4) / 0.7);
       V.grp.scale.setScalar(Math.max(0.01, 1 - c));
       if (!fx.armourSet) { fx.armourSet = true; setArmour(true); domainSound('lockin'); }
@@ -1645,24 +1645,23 @@ function bgTick() {
 setInterval(bgTick, 5200);
 setTimeout(bgTick, 2500); setTimeout(bgTick, 4500);
 
-/* ---------- ALWAYS-ON EAR: say "KAIROS" ("KY-ross") — no buttons, no re-arming ----------
+/* ---------- ALWAYS-ON EAR: say "LEVI" — no buttons, no re-arming ----------
    Web-maximum version: works while the page is open and the screen is on.
    True background wake (screen off / app closed) needs a native Android app.
    The ear heals itself: if iOS kills recognition, a watchdog restarts it. */
 let wakeMode = false, awake = false, awakeTimer = null;
 let wakeDesired = false;   // the ear SHOULD be on (set at boot; survives failures)
 let wakeListening = false; // a live recognition instance is actually running
-let wakeHold = false;      // paused while Kairos speaks or the mic button is in use
+let wakeHold = false;      // paused while Levi speaks or the mic button is in use
 let wakeRec = null, wakeBlockedAt = 0;
-// forgiving ear: speech engines transcribe "KY-ross" many ways — accept the common ones.
-// Bare "kai" also wakes him — word-boundary matched so only the standalone word
-// triggers, never "kai" buried inside a longer word. "kairo"/"kairos" were already covered.
-const WAKE_RE = /kairos|kairo|kiros|kyros|cairos|kai rose|chiros|keiros|kairus|kyro|kaios|kairosh|kyrose|kairoz|kai/i;
+// forgiving ear: speech engines transcribe "LEVI" a few ways — accept the common ones.
+// forgiving ear: speech engines transcribe "LEVI" a few ways — accept the common ones.
+const WAKE_RE = /levi|levy|levee|levie/i;
 const WAKE_STRIP = new RegExp(WAKE_RE.source, 'gi');
 let wakeFinal = '', wakeTimer = null; // patient wake: accumulate speech, answer after silence
 const wakeChip = document.getElementById('wakechip');
 const WAKE_WINDOW = 15000; // answers what he managed to say if he trails off
-const EAR_IDLE_TXT = 'SAY "KAI" \u2014 ALWAYS LISTENING';
+const EAR_IDLE_TXT = 'SAY "LEVI" \u2014 ALWAYS LISTENING';
 function wakeModeOn() { return wakeMode; }
 function isAwake() { return awake; }
 
@@ -1676,7 +1675,7 @@ function armWake(silent) { // arm the always-on ear; returns false if unsupporte
   wakeChip.classList.add('armed');
   document.body.classList.add('wake-dormant');
   setStatus(EAR_IDLE_TXT);
-  if (!silent) addLog('jarvis', 'Always-listening ear armed. Just say "Kai" \u2014 no buttons, ever.');
+  if (!silent) addLog('jarvis', 'Always-listening ear armed. Just say "Levi" \u2014 no buttons, ever.');
   try { speechSynthesis.cancel(); } catch (e) {}
   wakeLoop();
   return true;
@@ -1728,7 +1727,7 @@ function wakeLoop() {
     }
     const heard = (finals + ' ' + interim).toLowerCase();
     // prove the ear is alive: show exactly what it hears, so a missed
-    // "Kairos" shows its true transcription instead of silent failure
+    // "Levi" shows its true transcription instead of silent failure
     if (heard.trim()) setStatus('HEARD: "' + heard.trim().slice(-40) + '"');
     if (!awake) {
       if (WAKE_RE.test(heard)) {
@@ -1937,7 +1936,7 @@ function drawLog() {
     for (let i = logEntries.length - 1; i >= 0; i--) {
       const e = logEntries[i];
       const color = e.who === 'you' ? '#ffc857' : '#cfeeff';
-      const lines = wrap(ctx, '[' + e.ts + '] ' + (e.who === 'you' ? 'YOU' : 'KAIROS') + ': ' + e.text, w - 58);
+      const lines = wrap(ctx, '[' + e.ts + '] ' + (e.who === 'you' ? 'YOU' : 'LEVI') + ': ' + e.text, w - 58);
       for (let j = lines.length - 1; j >= 0; j--) {
         if (y < 84) break;
         ctx.fillStyle = color; ctx.fillText(lines[j], 30, y); y -= lh;
@@ -2452,7 +2451,7 @@ const bootLines = [
 function bootGreeting() {
   const h = new Date().getHours();
   const part = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
-  return `Systems online. Good ${part}, ${BOSS}. KAIROS at your service.`;
+  return `Systems online. Good ${part}, ${BOSS}. Levi at your service.`;
 }
 window.addEventListener('load', () => {
   wirePanels(); layoutHudRails(); refreshPanels();
