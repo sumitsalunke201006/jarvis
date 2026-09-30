@@ -236,7 +236,7 @@
       <select id="voiceSelect" style="flex:3; min-width:0"></select>
       <button id="voiceTest">TEST</button>
     </div>
-    <div class="up-note">Choose how KAIROS sounds. Saved on this device.</div>
+    <div class="up-note">Male voices only. Download more in iPad Settings → Accessibility → Spoken Content → Voices.</div>
     <div class="up-note">Stored only on this device.<br>The passphrase is never displayed back.<br>Long-press the reactor core to reopen this panel.</div>
   </div>
 </div>
@@ -325,6 +325,11 @@ function addLog(who, text) {
 
 /* ---------- VOICE ---------- */
 const VOICE_LS = 'kairos_voice_uri'; // his chosen voice, saved on this device
+// He wants male voices only: filter out the well-known female system voices.
+// If the filter ever leaves nothing (odd device), fall back to the full list
+// rather than an empty picker.
+const FEMALE_VOICE_RE = /samantha|karen|moira|tessa|veena|fiona|alice|amelie|anna|carmit|damayanti|ellen|ioana|joana|kanya|laura|lekha|luciana|mariska|melina|milena|monica|nora|paulina|sara|satu|sin-ji|yuna|zosia|alva|zira|aria|jenny|michelle|female|google us english/i;
+function isMaleVoice(v) { return !FEMALE_VOICE_RE.test(v.name || ''); }
 function pickVoice() {
   const vs = speechSynthesis.getVoices();
   const saved = localStorage.getItem(VOICE_LS);
@@ -332,18 +337,21 @@ function pickVoice() {
   const prefs = [/Google UK English Male/i, /Daniel/i, /Google US English/i,
                  /Microsoft (Guy|David|James)/i, /Alex/i, /Fred/i];
   for (const p of prefs) { const v = vs.find(v => p.test(v.name)); if (v) return v; }
-  return vs.find(v => v.lang && v.lang.startsWith('en')) || null;
+  return vs.find(v => v.lang && v.lang.startsWith('en') && isMaleVoice(v))
+      || vs.find(v => v.lang && v.lang.startsWith('en')) || null;
 }
-function fillVoiceSelect() { // list every English voice so he can pick by ear
+function fillVoiceSelect() { // list the male English voices so he can pick by ear
   const sel = document.getElementById('voiceSelect');
   if (!sel || !('speechSynthesis' in window)) return;
-  const vs = speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('en'));
+  const all = speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('en'));
+  const vs = all.filter(isMaleVoice);
+  const list = vs.length ? vs : all; // never show an empty picker
   const cur = sel.value;
   sel.innerHTML = '';
-  if (!vs.length) {
+  if (!list.length) {
     const o = document.createElement('option'); o.textContent = 'Loading voices…'; sel.appendChild(o); return;
   }
-  vs.forEach(v => {
+  list.forEach(v => {
     const o = document.createElement('option');
     o.value = v.voiceURI;
     o.textContent = v.name + ' (' + v.lang + ')';
