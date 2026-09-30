@@ -146,16 +146,30 @@
 
   /* ---------- DOMAIN EXPANSION cinematic overlays ---------- */
   #domainFlood { position: fixed; inset: 0; z-index: 90; pointer-events: none; opacity: 0;
-    background: radial-gradient(ellipse at center, rgba(196,132,255,.95) 0%, rgba(124,44,220,.9) 45%, rgba(42,8,96,.95) 100%); }
+    background: radial-gradient(ellipse at center, #3b1470 0%, #1c0738 48%, #070213 100%); }
+  #domainDark { position: fixed; inset: 0; z-index: 89; pointer-events: none; opacity: 0; background: #010103; }
+  #voidTitle { position: fixed; left: 0; right: 0; top: 42%; z-index: 93; pointer-events: none;
+    text-align: center; font-family: 'Orbitron', sans-serif; font-weight: 300;
+    font-size: clamp(2rem, 9vw, 4.5rem); letter-spacing: .45em; text-indent: .45em; color: #efe6ff;
+    text-shadow: 0 0 30px rgba(168,120,255,.8), 0 0 90px rgba(124,58,237,.5);
+    opacity: 0; transform: scale(.96); transition: opacity .8s ease, transform 1.8s ease; }
+  #voidTitle.show { opacity: 1; transform: scale(1); }
+  #potentialPill { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%) translateY(8px);
+    z-index: 60; pointer-events: none; font-family: 'Share Tech Mono', monospace; font-size: .62rem;
+    letter-spacing: 3px; color: #d9c2ff; white-space: nowrap;
+    border: 1px solid rgba(168,85,247,.55); border-radius: 999px; padding: 8px 18px;
+    background: rgba(20,6,40,.72); box-shadow: 0 0 22px rgba(168,85,247,.28);
+    opacity: 0; transition: opacity .6s ease, transform .6s ease; }
+  #potentialPill.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   #domainFlash { position: fixed; inset: 0; z-index: 91; pointer-events: none; opacity: 0; background: #f6ecff; }
   #domainFire { position: fixed; inset: 0; z-index: 92; pointer-events: none; opacity: 0;
     background: radial-gradient(ellipse at center, transparent 50%, rgba(255,110,20,.5) 80%, rgba(255,40,10,.85) 100%);
     animation: fireFlick .16s infinite alternate; }
   @keyframes fireFlick { from { filter: brightness(.8) saturate(1.1); } to { filter: brightness(1.25) saturate(1.45); } }
   /* while the domain is active, every DOM element except the 3D canvas + overlays clears away */
-  body > *:not(#scene):not(#domainFlood):not(#domainFlash):not(#domainFire):not(script):not(style) {
+  body > *:not(#scene):not(#domainFlood):not(#domainFlash):not(#domainFire):not(#domainDark):not(#voidTitle):not(#potentialPill):not(script):not(style) {
     transition: opacity .5s ease, filter .5s ease; }
-  body.domain-active > *:not(#scene):not(#domainFlood):not(#domainFlash):not(#domainFire):not(script):not(style) {
+  body.domain-active > *:not(#scene):not(#domainFlood):not(#domainFlash):not(#domainFire):not(#domainDark):not(#voidTitle):not(#potentialPill):not(script):not(style) {
     opacity: 0 !important; filter: blur(10px); pointer-events: none !important; }
 
   /* ---------- HUD SIDE PANELS (iPad rails + mobile) ---------- */
@@ -198,6 +212,9 @@
 <div id="domainFlood"></div>
 <div id="domainFlash"></div>
 <div id="domainFire"></div>
+<div id="domainDark"></div>
+<div id="voidTitle">INFINITY VOID</div>
+<div id="potentialPill">KAIROS // 100% POTENTIAL</div>
 
 <!-- BOOT SEQUENCE -->
 <div id="boot"><div id="bootlines"></div><div id="bootTap">▸ TAP TO WAKE KAIROS</div></div>
@@ -294,7 +311,7 @@ import * as THREE from 'three';
    blue fire + red fire converge into Hollow Purple). Plain text,
    case-insensitive substring match — no regex escaping needed. */
 const ARMOUR_ON_PHRASES = ["domain expansion", "hollow purple", "armour up", "suit up", "full power"];
-const ARMOUR_OFF_PHRASES = ["shut down", "shutdown", "stand down", "armour off", "power down", "normal mode"];
+const ARMOUR_OFF_PHRASES = ["shut down", "shutdown", "stand down", "armour off", "power down", "normal mode", "disable armour", "deactivate armour", "armour disable"];
 /* =============== end armour trigger phrases =============== */
 const micBtn = document.getElementById('mic');
 const micWrap = document.getElementById('micwrap');
@@ -321,11 +338,11 @@ function pickVoice() {
   for (const p of prefs) { const v = vs.find(v => p.test(v.name)); if (v) return v; }
   return vs.find(v => v.lang && v.lang.startsWith('en')) || null;
 }
-function speak(text) {
+function speak(text, opts) {
   addLog('jarvis', text);
   try {
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.95; u.pitch = 0.75; u.lang = 'en-US'; // deeper, calmer delivery
+    u.rate = (opts && opts.rate) || 0.95; u.pitch = (opts && opts.pitch) || 0.75; u.lang = 'en-US'; // deeper, calmer delivery
     const v = pickVoice(); if (v) u.voice = v;
     document.body.classList.add('talking'); setStatus('SPEAKING');
     const endSpeech = () => {
@@ -653,6 +670,7 @@ function matchesAny(t, phrases) { return phrases.some(p => t.includes(p)); }
 function setArmour(on) {
   armourMode = on;
   document.body.classList.toggle('armour-on', on);
+  const pp = document.getElementById('potentialPill'); if (pp && !on) pp.classList.remove('show');
   ariseTarget = on ? 1 : 0; // 3D power-up transformation target
   if (on) { triggerShockwave(); powerTone(true); }
   else powerTone(false);
@@ -776,46 +794,50 @@ function noiseBuf(ac, secs) {
   return b;
 }
 function domainSound(kind) {
+  // synthesized domain-expansion score — zero audio assets. Dark and majestic, never playful.
   const ac = dac(); if (!ac) return;
   try {
     const t = ac.currentTime;
-    if (kind === 'charge') { // dark gathering storm — the domain inhales before it strikes
-      const src = ac.createBufferSource(); src.buffer = noiseBuf(ac, 2.1);
-      const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9;
-      bp.frequency.setValueAtTime(170, t); bp.frequency.exponentialRampToValueAtTime(2600, t + 1.85);
+    if (kind === 'pulse') { // PHASE 1: deep atmospheric pulse — the interface goes silent and dark
+      [0, 1.05].forEach((off) => {
+        const o = ac.createOscillator(); o.type = 'sine';
+        o.frequency.setValueAtTime(52, t + off);
+        o.frequency.exponentialRampToValueAtTime(34, t + off + 0.7);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0.0001, t + off);
+        g.gain.exponentialRampToValueAtTime(0.5, t + off + 0.06);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + off + 0.85);
+        o.connect(g); g.connect(ac.destination);
+        o.start(t + off); o.stop(t + off + 0.9);
+      });
+      const bed = ac.createOscillator(); bed.type = 'sawtooth'; bed.frequency.value = 55;
+      const blp = ac.createBiquadFilter(); blp.type = 'lowpass'; blp.frequency.value = 160;
+      const bg = ac.createGain(); bg.gain.setValueAtTime(0.0001, t);
+      bg.gain.exponentialRampToValueAtTime(0.07, t + 1.2);
+      bg.gain.exponentialRampToValueAtTime(0.0001, t + 2.1);
+      bed.connect(blp); blp.connect(bg); bg.connect(ac.destination);
+      bed.start(t); bed.stop(t + 2.15);
+    } else if (kind === 'surge') { // PHASE 2: sudden acceleration — dark riser + growl
+      const src = ac.createBufferSource(); src.buffer = noiseBuf(ac, 1.3);
+      const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.1;
+      bp.frequency.setValueAtTime(220, t); bp.frequency.exponentialRampToValueAtTime(3400, t + 1.05);
       const g = ac.createGain();
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.42, t + 1.8);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 2.0);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 1.0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
       src.connect(bp); bp.connect(g); g.connect(ac.destination);
-      src.start(t); src.stop(t + 2.05);
-      // guttural growl rising underneath — FM saw through heavy distortion
+      src.start(t); src.stop(t + 1.25);
       const growl = ac.createOscillator(); growl.type = 'sawtooth';
-      growl.frequency.setValueAtTime(46, t); growl.frequency.exponentialRampToValueAtTime(92, t + 1.85);
-      const fm = ac.createOscillator(); fm.frequency.setValueAtTime(29, t);
-      fm.frequency.exponentialRampToValueAtTime(61, t + 1.85);
-      const fmg = ac.createGain(); fmg.gain.setValueAtTime(20, t);
-      fmg.gain.exponentialRampToValueAtTime(70, t + 1.85);
-      fm.connect(fmg); fmg.connect(growl.frequency);
+      growl.frequency.setValueAtTime(58, t); growl.frequency.exponentialRampToValueAtTime(130, t + 1.05);
       const wg = ac.createWaveShaper();
       const gc = new Float32Array(256);
-      for (let i = 0; i < 256; i++) { const x = i/128 - 1; gc[i] = Math.tanh(3.2*x); }
+      for (let i = 0; i < 256; i++) { const x = i/128 - 1; gc[i] = Math.tanh(3.4*x); }
       wg.curve = gc;
-      const glp = ac.createBiquadFilter(); glp.type = 'lowpass'; glp.frequency.value = 420;
+      const glp = ac.createBiquadFilter(); glp.type = 'lowpass'; glp.frequency.value = 500;
       const gg = ac.createGain(); gg.gain.setValueAtTime(0.0001, t);
-      gg.gain.exponentialRampToValueAtTime(0.34, t + 1.8); gg.gain.exponentialRampToValueAtTime(0.0001, t + 2.0);
+      gg.gain.exponentialRampToValueAtTime(0.4, t + 1.0); gg.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
       growl.connect(wg); wg.connect(glp); glp.connect(gg); gg.connect(ac.destination);
-      growl.start(t); growl.stop(t + 2.05); fm.start(t); fm.stop(t + 2.05);
-      // deep sub pulse — a slow dread heartbeat
-      const sub = ac.createOscillator(); sub.type = 'sine'; sub.frequency.value = 38;
-      const sg = ac.createGain(); sg.gain.setValueAtTime(0.0001, t);
-      const trem = ac.createOscillator(); trem.frequency.value = 3.2;
-      const tg = ac.createGain(); tg.gain.value = 0.05;
-      trem.connect(tg); tg.connect(sg.gain);
-      sg.gain.exponentialRampToValueAtTime(0.14, t + 1.2);
-      sg.gain.exponentialRampToValueAtTime(0.0001, t + 2.0);
-      sub.connect(sg); sg.connect(ac.destination);
-      sub.start(t); sub.stop(t + 2.05); trem.start(t); trem.stop(t + 2.05);
-    } else if (kind === 'boom') { // cataclysm: snap crack + crushing blast + abyssal drop
+      growl.start(t); growl.stop(t + 1.25);
+    } else if (kind === 'boom') { // COLLISION: snap crack + crushing blast + abyssal drop
       const crack = ac.createBufferSource(); crack.buffer = noiseBuf(ac, 0.12);
       const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
       const cg2 = ac.createGain();
@@ -838,68 +860,101 @@ function domainSound(kind) {
       const dg = ac.createGain(); dg.gain.setValueAtTime(0.9, t);
       dg.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
       drop.connect(dg); dg.connect(ac.destination); drop.start(t); drop.stop(t + 1.45);
-    } else if (kind === 'shimmer') { // the void hums — dark detuned drone, no chimes
-      [110, 116.54, 164.81].forEach((f) => {
-        const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
-        const lp2 = ac.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 640;
+    } else if (kind === 'voidDrone') { // PHASE 3: the void hums — vast, calm, deep
+      [55, 58.27, 82.4].forEach((f) => {
+        const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = f;
         const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.06, t + 0.5);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 2.7);
-        o.connect(lp2); lp2.connect(g); g.connect(ac.destination);
-        o.start(t); o.stop(t + 2.8);
+        g.gain.exponentialRampToValueAtTime(0.11, t + 0.9);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 3.1);
+        o.connect(g); g.connect(ac.destination);
+        o.start(t); o.stop(t + 3.2);
       });
-      const w = ac.createOscillator(); w.type = 'sine'; w.frequency.value = 1244;
-      const wlfo = ac.createOscillator(); wlfo.frequency.value = 0.7;
-      const wlg = ac.createGain(); wlg.gain.value = 180;
-      wlfo.connect(wlg); wlg.connect(w.frequency);
-      const wg2 = ac.createGain(); wg2.gain.setValueAtTime(0.0001, t);
-      wg2.gain.exponentialRampToValueAtTime(0.028, t + 0.8);
-      wg2.gain.exponentialRampToValueAtTime(0.0001, t + 2.7);
-      w.connect(wg2); wg2.connect(ac.destination);
-      w.start(t); w.stop(t + 2.8); wlfo.start(t); wlfo.stop(t + 2.8);
-    } else if (kind === 'rumble') { // deep bed while the flood holds
-      domainRumbleStop();
-      const src = ac.createBufferSource(); src.buffer = noiseBuf(ac, 2.5); src.loop = true;
-      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 110;
-      const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.22, t + 0.4);
-      src.connect(lp); lp.connect(g); g.connect(ac.destination); src.start(t);
-      domainRumble = { src, g };
+      const air = ac.createBufferSource(); air.buffer = noiseBuf(ac, 3.2);
+      const alp = ac.createBiquadFilter(); alp.type = 'lowpass'; alp.frequency.value = 300;
+      const ag = ac.createGain(); ag.gain.setValueAtTime(0.0001, t);
+      ag.gain.exponentialRampToValueAtTime(0.05, t + 1.4);
+      ag.gain.exponentialRampToValueAtTime(0.0001, t + 3.1);
+      air.connect(alp); alp.connect(ag); ag.connect(ac.destination);
+      air.start(t); air.stop(t + 3.2);
+    } else if (kind === 'lockin') { // PHASE 4: collapse into the interface — one deep, clean lock
+      const o = ac.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(196, t); o.frequency.exponentialRampToValueAtTime(98, t + 0.5);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.32, t + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + 0.85);
     }
-  } catch (e) { /* silence is acceptable — the cinematic never depends on audio */ }
+  } catch (e) {}
 }
-function domainRumbleStop() {
-  if (!domainRumble || !domainAC) { domainRumble = null; return; }
-  try {
-    const t = domainAC.currentTime, r = domainRumble; domainRumble = null;
-    r.g.gain.cancelScheduledValues(t); r.g.gain.setValueAtTime(r.g.gain.value, t);
-    r.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
-    setTimeout(() => { try { r.src.stop(); } catch (e) {} }, 600);
-  } catch (e) { domainRumble = null; }
-}
-
 let domainFX = null;
+/* ---------- DOMAIN EXPANSION: the Infinity Void ----------
+   "Domain Expansion." → the interface goes silent and dark, a blue sphere
+   materializes LEFT and a purple sphere RIGHT; they hover, then SUDDENLY
+   accelerate and collide at the center → the screen becomes the INFINITY VOID
+   (deep purple deep-space, geometric structures, the words appear as Kairos
+   speaks them calmly) → the void collapses into KAIROS // 100% POTENTIAL. */
+function makeVoid() {
+  // deep-space void: far geometric structures, a breathing void-heart,
+  // glowing atmospheric layers, slow-drifting motes. Enormous, calm, majestic.
+  const g = new THREE.Group();
+  const struct = (op) => new THREE.MeshBasicMaterial({ color: 0x8b5cf6, wireframe: true,
+    transparent: true, opacity: op });
+  const ico1 = new THREE.Mesh(new THREE.IcosahedronGeometry(6, 1), struct(0.10));
+  ico1.position.set(-9, 3, -14);
+  const ico2 = new THREE.Mesh(new THREE.IcosahedronGeometry(9, 1), struct(0.07));
+  ico2.position.set(10, -4, -20);
+  const torus = new THREE.Mesh(new THREE.TorusGeometry(14, 0.35, 8, 72), struct(0.06));
+  torus.position.set(0, 0, -24); torus.rotation.x = 1.2;
+  g.add(ico1, ico2, torus);
+  const core = new THREE.Mesh(new THREE.SphereGeometry(4.2, 32, 24),
+    new THREE.MeshBasicMaterial({ color: 0x5b21b6, transparent: true, opacity: 0.55 }));
+  const coreBase = core.geometry.attributes.position.array.slice();
+  core.position.set(0, 0.6, -12);
+  g.add(core);
+  const layers = [];
+  for (let i = 0; i < 3; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: domainGlowTex, color: 0x7c3aed,
+      transparent: true, opacity: 0.14 - i*0.03, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const sz = 26 - i*6;
+    sp.scale.set(sz, sz, 1);
+    sp.position.set((Math.random()-.5)*10, (Math.random()-.5)*6, -8 - i*5);
+    g.add(sp); layers.push(sp);
+  }
+  const N = 160, pos = new Float32Array(N*3), seeds = [];
+  for (let i = 0; i < N; i++) {
+    pos[i*3] = (Math.random()-.5)*36; pos[i*3+1] = (Math.random()-.5)*22; pos[i*3+2] = -4 - Math.random()*22;
+    seeds.push(Math.random()*Math.PI*2);
+  }
+  const pg = new THREE.BufferGeometry();
+  pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const motes = new THREE.Points(pg, new THREE.PointsMaterial({ color: 0xa78bfa, size: 0.14,
+    map: domainGlowTex, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }));
+  motes.frustumCulled = false;
+  g.add(motes);
+  g.visible = false;
+  return { grp: g, ico1, ico2, torus, core, coreBase, layers, motes, seeds };
+}
 function playDomainExpansion() {
   if (domainFX) return;
   if (!threeOK || reducedMotion) { // graceful: no 3D, still engage
     setArmour(true);
-    speak('Behold... Infinity Void. Hundred percent potential, sir.');
+    speak('Infinity Void.', { rate: 0.8, pitch: 0.6 });
     return;
   }
-  document.body.classList.add('domain-active'); // UI clears away
-  const blue = makeFireOrb(0x2a6bff); // cursed technique lapse: blue, from the right
-  const red = makeFireOrb(0xff2a44);  // cursed technique reversal: red, from the left
-  blue.grp.position.set(8, 0.6, 5); red.grp.position.set(-8, 0.6, 5);
-  scene3.add(blue.grp, red.grp);
-  const purple = makeFireOrb(0xa855f7); // hollow purple — born at the collision
-  purple.grp.position.set(0, 0.6, 5); purple.grp.visible = false;
-  purple.grp.scale.setScalar(0.01);
-  scene3.add(purple.grp);
-  domainFX = { t: 0, blue, red, purple, rings: [], engaged: false, armourSet: false, flashV: 0, floodV: 0, fireV: 0 };
+  document.body.classList.add('domain-active'); // every DOM element clears away
+  const blue = makeFireOrb(0x2a6bff);   // lapse: blue — materializes LEFT
+  const purple = makeFireOrb(0xa855f7); // reversal: purple — materializes RIGHT
+  blue.grp.position.set(-6.5, 0.6, 5); purple.grp.position.set(6.5, 0.6, 5);
+  blue.grp.scale.setScalar(0.01); purple.grp.scale.setScalar(0.01);
+  scene3.add(blue.grp, purple.grp);
+  const voidG = makeVoid();
+  scene3.add(voidG.grp);
+  domainFX = { t: 0, blue, purple, voidG, rings: [], phase: 'materialize',
+    flashV: 0, floodV: 0, darkV: 0, surged: false,
+    titleShown: false, titleGone: false, armourSet: false, pillShown: false, uiBack: false };
   domainFX.embers = makeEmberSystem();
   scene3.add(domainFX.embers.points);
-  domainSound('charge');
-  shake = Math.max(shake, 0.5);
+  domainSound('pulse'); // deep atmospheric pulse — silence and darkness
 }
 function spawnDomainRing(colorHex, delay) {
   const mesh = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.06, 72),
@@ -964,84 +1019,129 @@ function updateDomainFX(dt) {
       }
     }
   };
-  if (T < 1.9) {
-    // converge: blue from right, red from left, accelerating inward
-    const e = Math.pow(Math.min(1, T / 1.9), 2.3);
-    fx.blue.grp.position.x = 8 * (1 - e);
-    fx.red.grp.position.x = -8 * (1 - e);
-    fx.blue.grp.position.y = 0.6 + Math.sin(T*6) * 0.15;
-    fx.red.grp.position.y = 0.6 + Math.cos(T*6) * 0.15;
-    flick(fx.blue, T); flick(fx.red, T);
-    for (let i = 0; i < 3; i++) {
-      emberSpawn(fx, fx.blue.grp.position.x, fx.blue.grp.position.y, 5, 0.45, 0.65, 1, 0.7, 1.2);
-      emberSpawn(fx, fx.red.grp.position.x, fx.red.grp.position.y, 5, 1, 0.42, 0.12, 0.7, 1.2);
+  const D = document.getElementById('domainDark'),
+        FL = document.getElementById('domainFlood'),
+        FS = document.getElementById('domainFlash');
+  if (T < 2.0) {
+    // PHASE 1 — ACTIVATION: slow, majestic materialization in silence and darkness
+    const m = Math.min(1, T / 1.2);
+    const sc = 1 - Math.pow(1 - m, 3);
+    fx.blue.grp.scale.setScalar(Math.max(0.01, sc));
+    fx.purple.grp.scale.setScalar(Math.max(0.01, sc));
+    fx.blue.grp.position.y = 0.6 + Math.sin(T*2.2) * 0.18;
+    fx.purple.grp.position.y = 0.6 + Math.sin(T*2.2 + 2.1) * 0.18;
+    flick(fx.blue, T); flick(fx.purple, T);
+    emberSpawn(fx, fx.blue.grp.position.x, fx.blue.grp.position.y, 5, 0.45, 0.62, 1, 1.4, 0.9);
+    emberSpawn(fx, fx.purple.grp.position.x, fx.purple.grp.position.y, 5, 0.68, 0.42, 1, 1.4, 0.9);
+    fx.darkV = Math.min(1, T / 0.6);
+  } else if (T < 3.1) {
+    // PHASE 2 — COLLISION COURSE: sudden acceleration toward the exact center
+    const e = Math.pow((T - 2.0) / 1.1, 3.2);
+    if (!fx.surged) { fx.surged = true; domainSound('surge'); }
+    fx.blue.grp.position.x = -6.5 * (1 - e);
+    fx.purple.grp.position.x = 6.5 * (1 - e);
+    fx.blue.grp.position.y = 0.6 + Math.sin(T*9) * 0.1;
+    fx.purple.grp.position.y = 0.6 + Math.cos(T*9) * 0.1;
+    flick(fx.blue, T); flick(fx.purple, T);
+    for (let i = 0; i < 4; i++) { // blue and purple trails stretch behind them
+      emberSpawn(fx, fx.blue.grp.position.x, fx.blue.grp.position.y, 5, 0.45, 0.62, 1, 0.5, 0.6);
+      emberSpawn(fx, fx.purple.grp.position.x, fx.purple.grp.position.y, 5, 0.68, 0.42, 1, 0.5, 0.6);
     }
-    fx.fireV = Math.min(0.85, T / 1.9 * 0.85);
+    shake = Math.max(shake, e * 0.9); // the screen subtly shakes as they close in
+    fx.darkV = 1;
   } else {
-    if (!fx.engaged) {
-      fx.engaged = true;
-      fx.flashV = 1; // collision flash
-      shake = 2.2;
-      scene3.remove(fx.blue.grp, fx.red.grp);
-      fx.purple.grp.visible = true;
+    if (fx.phase !== 'void') {
+      // IMPACT — massive but clean: flash, shockwaves, the spheres are gone
+      fx.phase = 'void';
+      fx.flashV = 1;
+      shake = 2.4;
+      scene3.remove(fx.blue.grp, fx.purple.grp);
+      fx.voidG.grp.visible = true;
       spawnDomainRing(0xf3e8ff, 0); spawnDomainRing(0xa855f7, 0.12); spawnDomainRing(0x6d28d9, 0.24);
-      speak('Behold... Infinity Void. Hundred percent potential, sir.');
-      domainSound('boom'); domainSound('rumble');
-      fx.fireV = 1;
-      for (let i = 0; i < 130; i++) emberSpawn(fx, 0, 0.6, 5, 1, 0.55 + Math.random()*0.3, 0.15, 1.2, 2.2);
-      for (let i = 0; i < 40; i++) emberSpawn(fx, 0, 0.6, 5, 1, 0.95, 0.85, 0.8, 3.2);
+      domainSound('boom');
+      for (let i = 0; i < 150; i++) emberSpawn(fx, 0, 0.6, 5, 0.85 + Math.random()*0.15, 0.75, 1, 1.4, 2.4);
+      for (let i = 0; i < 50; i++) emberSpawn(fx, 0, 0.6, 5, 1, 0.95, 1, 0.9, 3.4);
     }
-    const pt = T - 1.9;
-    flick(fx.purple, T);
-    if (pt < 1.7) for (let i = 0; i < 2; i++)
-      emberSpawn(fx, (Math.random()-.5)*2, 0.6 + (Math.random()-.5)*2, 5, 0.75, 0.4, 1, 1.6, 1.0);
-    const pop = Math.min(1, pt / 0.45);
-    fx.purple.grp.scale.setScalar(Math.max(0.01,
-      (0.01 + 2.0 * (1 - Math.pow(1 - pop, 3))) * (1 + Math.sin(T*10) * 0.05)));
+    const pt = T - 3.1;
+    // PHASE 3 — INFINITY VOID: the interface has entered a different state
+    const V = fx.voidG;
+    const vin = Math.min(1, pt / 0.8);
+    V.grp.scale.setScalar(0.6 + 0.4 * vin);
+    V.grp.position.z = Math.min(6, pt * 1.1); // slow dive — enormous sense of scale
+    V.ico1.rotation.x += dt*0.05; V.ico1.rotation.y += dt*0.08;
+    V.ico2.rotation.y -= dt*0.04; V.ico2.rotation.z += dt*0.03;
+    V.torus.rotation.z += dt*0.06;
+    V.core.scale.setScalar(1 + Math.sin(pt*1.6) * 0.05);
+    const cp = V.core.geometry.attributes.position.array, cb = V.coreBase;
+    for (let i = 0; i < cp.length; i += 3) {
+      const nx = cb[i], ny = cb[i+1], nz = cb[i+2];
+      const n = Math.sin(nx*1.4 + pt*1.8) * Math.sin(ny*1.4 - pt*1.3) * Math.sin(nz*1.4 + pt*2.1);
+      const k2 = 1 + 0.09 * n;
+      cp[i] = nx*k2; cp[i+1] = ny*k2; cp[i+2] = nz*k2;
+    }
+    V.core.geometry.attributes.position.needsUpdate = true;
+    V.layers.forEach((sp, i) => { sp.material.opacity = (0.14 - i*0.03) * (0.75 + 0.25*Math.sin(pt*1.1 + i*2)); });
+    const mp = V.motes.geometry.attributes.position.array;
+    for (let i = 0; i < mp.length; i += 3) {
+      mp[i+1] += dt * 0.35;
+      mp[i] += Math.sin(pt*0.7 + V.seeds[i/3]) * dt * 0.2;
+      if (mp[i+1] > 11) mp[i+1] = -11;
+    }
+    V.motes.geometry.attributes.position.needsUpdate = true;
+    if (pt < 2.2) for (let i = 0; i < 2; i++)
+      emberSpawn(fx, (Math.random()-.5)*10, -2 + Math.random()*2, 2, 0.6, 0.42, 1, 2, 0.5);
     for (const r of fx.rings) {
       r.t += dt;
       if (r.t < 0) continue;
       r.mesh.visible = true;
-      r.mesh.scale.setScalar(1 + r.t * 14);
-      r.mesh.material.opacity = Math.max(0, 0.9 * (1 - r.t / 1.1));
+      r.mesh.scale.setScalar(1 + r.t * 16);
+      r.mesh.material.opacity = Math.max(0, 0.9 * (1 - r.t / 1.2));
     }
-    if (pt < 0.9) fx.floodV = pt / 0.9 * 0.93;
-    else if (pt < 1.4) fx.floodV = 0.93;
-    else fx.floodV = Math.max(0, 0.93 * (1 - (pt - 1.4) / 0.8));
-    if (pt >= 1.15 && !fx.armourSet) { fx.armourSet = true; setArmour(true); domainSound('shimmer'); }
-    fx.fireV = Math.max(0, 1 - pt / 2.2);
-    if (pt >= 1.7) { // dissolve into embers as the flood recedes
-      const d = Math.min(1, (pt - 1.7) / 0.6);
-      fx.purple.grp.scale.setScalar(Math.max(0.01, 2.0 * (1 - d)));
-      fx.purple.pts.material.opacity = 0.95 * (1 - d);
-      fx.purple.glow.material.opacity = 0.9 * (1 - d);
+    fx.floodV = pt < 0.35 ? pt / 0.35 : 1;
+    if (pt >= 1.0 && !fx.titleShown) { // the words appear — and Kairos speaks them
+      fx.titleShown = true;
+      document.getElementById('voidTitle').classList.add('show');
+      speak('Infinity Void.', { rate: 0.8, pitch: 0.6 }); // calm, deep, controlled — never shouting
+      domainSound('voidDrone');
     }
-    if (T >= 3.0) document.body.classList.remove('domain-active'); // UI fades back in
+    if (pt >= 2.3 && !fx.titleGone) {
+      fx.titleGone = true;
+      document.getElementById('voidTitle').classList.remove('show');
+    }
+    if (pt >= 2.4) {
+      // PHASE 4 — the void rapidly collapses into the Kairos interface
+      const c = Math.min(1, (pt - 2.4) / 0.7);
+      V.grp.scale.setScalar(Math.max(0.01, 1 - c));
+      fx.floodV = Math.max(0, 1 - c);
+      fx.darkV = Math.max(0, 1 - c);
+      if (!fx.armourSet) { fx.armourSet = true; setArmour(true); domainSound('lockin'); }
+      if (!fx.pillShown) { fx.pillShown = true; document.getElementById('potentialPill').classList.add('show'); }
+      if (!fx.uiBack && c > 0.55) { fx.uiBack = true; document.body.classList.remove('domain-active'); }
+    }
+    if (T >= 6.9) { // full cleanup
+      const disposeGrp = (o) => {
+        scene3.remove(o.grp);
+        o.grp.traverse((m) => {
+          if (m.geometry) m.geometry.dispose();
+          if (m.material) {
+            if (m.material.map && m.material.map !== domainGlowTex) m.material.map.dispose();
+            m.material.dispose();
+          }
+        });
+      };
+      disposeGrp(fx.blue); disposeGrp(fx.purple); disposeGrp(fx.voidG);
+      for (const r of fx.rings) { scene3.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); }
+      if (fx.embers) { scene3.remove(fx.embers.points); fx.embers.points.geometry.dispose(); fx.embers.points.material.dispose(); }
+      if (D) D.style.opacity = 0; if (FL) FL.style.opacity = 0; if (FS) FS.style.opacity = 0;
+      document.getElementById('voidTitle').classList.remove('show');
+      document.body.classList.remove('domain-active');
+      domainFX = null;
+    }
   }
-  fx.flashV = Math.max(0, fx.flashV - dt * 2.2);
-  const fl = document.getElementById('domainFlood'), fs = document.getElementById('domainFlash');
-  if (fl) fl.style.opacity = fx.floodV.toFixed(3);
-  if (fs) fs.style.opacity = fx.flashV.toFixed(3);
-  const fr = document.getElementById('domainFire');
-  if (fr) fr.style.opacity = (fx.fireV || 0).toFixed(3);
-  if (T >= 3.8) {
-    for (const o of [fx.blue, fx.red, fx.purple]) {
-      scene3.remove(o.grp);
-      o.grp.traverse((m) => {
-        if (m.geometry) m.geometry.dispose();
-        if (m.material) {
-          if (m.material.map && m.material.map !== domainGlowTex) m.material.map.dispose();
-          m.material.dispose();
-        }
-      });
-    }
-    for (const r of fx.rings) { scene3.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); }
-    if (fx.embers) { scene3.remove(fx.embers.points); fx.embers.points.geometry.dispose(); fx.embers.points.material.dispose(); }
-    domainRumbleStop();
-    if (fl) fl.style.opacity = 0; if (fs) fs.style.opacity = 0;
-    document.body.classList.remove('domain-active');
-    domainFX = null;
-  }
+  fx.flashV = Math.max(0, fx.flashV - dt * 2.4);
+  if (D) D.style.opacity = fx.darkV.toFixed(3);
+  if (FL) FL.style.opacity = fx.floodV.toFixed(3);
+  if (FS) FS.style.opacity = fx.flashV.toFixed(3);
 }
 
 /* ---------- COMMANDS: instant device actions stay local, everything else -> neural core ---------- */
@@ -1540,7 +1640,7 @@ function wakeLoop() {
       wakeTimer = setTimeout(() => {
         const cmd = wakeFinal.replace(/kairos/gi, '').trim();
         wakeFinal = '';
-        if (awake && cmd) { handleCommand(cmd); prolongAwake(); }
+        if (awake && cmd) { handleCommand(cmd); goDormant(); } // one command, then stop directly
       }, EAR_SILENCE_MS);
     }
   };
@@ -1564,16 +1664,20 @@ function doWakeUp() {
   speak('Yes, sir?');
   prolongAwake();
 }
+function goDormant() { // stop directly: mic stays armed for "KAIROS", nothing else listens
+  clearTimeout(awakeTimer);
+  clearTimeout(wakeTimer);
+  wakeFinal = '';
+  awake = false;
+  document.body.classList.remove('awake');
+  document.body.classList.add('wake-dormant');
+  setStatus('DORMANT — SAY "KAIROS"');
+}
 function prolongAwake() {
   clearTimeout(awakeTimer);
   awakeTimer = setTimeout(() => {
-    clearTimeout(wakeTimer);
     const cmd = wakeFinal.replace(/kairos/gi, '').trim();
-    wakeFinal = '';
-    awake = false;
-    document.body.classList.remove('awake');
-    document.body.classList.add('wake-dormant');
-    setStatus('DORMANT — SAY "KAIROS"');
+    goDormant();
     if (cmd) handleCommand(cmd); // answer what he managed to say before dozing off
   }, WAKE_WINDOW);
 }
