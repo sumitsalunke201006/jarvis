@@ -330,7 +330,7 @@ function speak(text, opts) {
     document.body.classList.add('talking'); setStatus('SPEAKING');
     const endSpeech = () => {
       document.body.classList.remove('talking');
-      if (wakeModeOn()) setStatus(isAwake() ? 'AWAKE — SPEAK NOW' : 'DORMANT — SAY "KAIROS"');
+      if (wakeDesired) setStatus(awake ? 'AWAKE — SPEAK NOW' : (wakeListening ? EAR_IDLE_TXT : 'EAR STARTING…'));
       else setStatus('STANDBY');
     };
     u.onend = u.onerror = endSpeech;
@@ -343,7 +343,7 @@ function speak(text, opts) {
     }
   } catch (e) {
     document.body.classList.remove('talking');
-    setStatus(wakeModeOn() ? (isAwake() ? 'AWAKE — SPEAK NOW' : 'DORMANT — SAY "KAIROS"') : 'STANDBY');
+    setStatus(wakeDesired ? (awake ? 'AWAKE — SPEAK NOW' : (wakeListening ? EAR_IDLE_TXT : 'EAR STARTING…')) : 'STANDBY');
   }
 }
 if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => {};
@@ -1487,7 +1487,10 @@ function earStopUI() {
   recognizing = false; earRec = null;
   micWrap.classList.remove('listening');
   document.body.classList.remove('listening');
-  if (currentStatus === 'LISTENING' || currentStatus.indexOf('HEARD:') === 0) setStatus('STANDBY');
+  if (currentStatus === 'LISTENING' || currentStatus.indexOf('HEARD:') === 0)
+    setStatus(wakeDesired ? (wakeListening ? EAR_IDLE_TXT : 'EAR STARTING…') : 'STANDBY');
+  wakeHold = false; // the mic button is done — hand the mic back to the always-on ear
+  if (wakeDesired) wakeLoop();
 }
 function earSubmit() {
   if (earDone) return; earDone = true;
@@ -1502,6 +1505,8 @@ function listen() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { speak('I am afraid this browser cannot hear, sir. Please type below, or open me in Chrome on Android.'); return; }
   if (recognizing) { earSubmit(); return; } // second tap = "answer now"
+  wakeHold = true; // the ear rests while the mic button works — one command, one answer
+  try { wakeRec && wakeRec.stop(); } catch (e) {}
   const rec = new SR();
   rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
   earRec = rec; earFinal = ''; earDone = false;
@@ -1573,53 +1578,80 @@ function bgTick() {
 setInterval(bgTick, 5200);
 setTimeout(bgTick, 2500); setTimeout(bgTick, 4500);
 
-/* ---------- WAKE WORD: say "KAIROS" ("KY-ross") to wake him ----------
+/* ---------- ALWAYS-ON EAR: say "KAIROS" ("KY-ross") — no buttons, no re-arming ----------
    Web-maximum version: works while the page is open and the screen is on.
-   True background wake (screen off / app closed) needs a native Android app. */
+   True background wake (screen off / app closed) needs a native Android app.
+   The ear heals itself: if iOS kills recognition, a watchdog restarts it. */
 let wakeMode = false, awake = false, awakeTimer = null;
+let wakeDesired = false;   // the ear SHOULD be on (set at boot; survives failures)
+let wakeListening = false; // a live recognition instance is actually running
+let wakeHold = false;      // paused while Kairos speaks or the mic button is in use
+let wakeRec = null, wakeBlockedAt = 0;
 // forgiving ear: speech engines transcribe "KY-ross" many ways — accept the common ones
 const WAKE_RE = /kairos|kairo|kiros|kyros|cairos|kai rose|chiros|keiros|kairus|kyro|kaios/i;
 const WAKE_STRIP = new RegExp(WAKE_RE.source, 'gi');
 let wakeFinal = '', wakeTimer = null; // patient wake: accumulate speech, answer after silence
 const wakeChip = document.getElementById('wakechip');
-const WAKE_WINDOW = 15000; // stays awake 15s after last command
+const WAKE_WINDOW = 15000; // answers what he managed to say if he trails off
+const EAR_IDLE_TXT = 'SAY "KAIROS" \u2014 ALWAYS LISTENING';
 function wakeModeOn() { return wakeMode; }
 function isAwake() { return awake; }
 
-function armWake(silent) { // Alexa-style: arm the wake-word ear; returns false if unsupported
-  if (wakeMode) return true;
+function armWake(silent) { // arm the always-on ear; returns false if unsupported
+  wakeDesired = true; wakeBlockedAt = 0;
+  if (wakeMode) { wakeLoop(); return true; }
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { if (!silent) speak('Wake word needs a browser with speech recognition, sir.'); return false; }
+  if (!SR) { if (!silent) speak('This browser cannot hear, sir — the ear needs speech recognition.'); return false; }
   wakeMode = true;
-  wakeChip.textContent = '\u25c9 WAKE WORD : ARMED';
+  wakeChip.textContent = '\u25c9 EAR : ALWAYS ON';
   wakeChip.classList.add('armed');
   document.body.classList.add('wake-dormant');
-  setStatus('DORMANT \u2014 SAY "KAIROS"');
-  if (!silent) addLog('jarvis', 'Wake-word protocol armed. Say "KAIROS" and I shall awaken.');
+  setStatus(EAR_IDLE_TXT);
+  if (!silent) addLog('jarvis', 'Always-listening ear armed. Just say "KAIROS" \u2014 no buttons, ever.');
   try { speechSynthesis.cancel(); } catch (e) {}
   wakeLoop();
   return true;
 }
-wakeChip.addEventListener('click', () => { // manual mute / unmute toggle stays
-  if (wakeMode) { stopWake(); return; }
-  armWake(false);
+wakeChip.addEventListener('click', () => { // the ear's only switch: mute / unmute
+  if (wakeListening) { // he chose silence \u2014 respect it until he taps again
+    wakeDesired = false;
+    stopWake();
+    addLog('jarvis', 'Ear muted, sir. Tap the ear any time to listen again.');
+    return;
+  }
+  armWake(false); // tap also retries after a mic block
 });
 
-function stopWake() {
-  wakeMode = false; awake = false;
-  clearTimeout(awakeTimer);
-  wakeChip.textContent = '◉ WAKE WORD : OFF';
+function stopWake() { // internal: ear off right now (mute or failure); desire is separate
+  wakeMode = false; awake = false; wakeListening = false; wakeHold = false;
+  try { wakeRec && wakeRec.abort(); } catch (e) {}
+  wakeRec = null;
+  clearTimeout(awakeTimer); clearTimeout(wakeTimer);
+  wakeFinal = '';
+  wakeChip.textContent = '\u25c9 EAR : OFF';
   wakeChip.classList.remove('armed');
   document.body.classList.remove('wake-dormant', 'awake');
   setStatus('STANDBY');
 }
 
+function submitWakeCmd() {
+  const cmd = wakeFinal.replace(WAKE_STRIP, '').trim();
+  wakeFinal = '';
+  if (awake && cmd) { handleCommand(cmd); goDormant(); } // one command, then rest \u2014 the ear itself never sleeps
+}
 function wakeLoop() {
-  if (!wakeMode) return;
+  if (!wakeDesired || wakeListening || wakeHold) return; // one live ear at a time, never stacked
+  if (Date.now() - wakeBlockedAt < 30000) return;        // back off after a mic denial
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
   const rec = new SR();
+  wakeRec = rec; wakeListening = true; wakeMode = true;
+  wakeChip.textContent = '\u25c9 EAR : ALWAYS ON';
+  wakeChip.classList.add('armed');
   rec.lang = 'en-US'; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+  rec.onstart = () => { if (!awake) setStatus(EAR_IDLE_TXT); };
   rec.onresult = (e) => {
+    if (document.body.classList.contains('talking')) return; // never answer his own voice
     let finals = '', interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const tr = e.results[i][0].transcript;
@@ -1627,27 +1659,45 @@ function wakeLoop() {
     }
     const heard = (finals + ' ' + interim).toLowerCase();
     if (!awake) {
-      if (WAKE_RE.test(heard)) { wakeFinal = ''; doWakeUp(); }
+      if (WAKE_RE.test(heard)) {
+        wakeFinal = heard.replace(WAKE_STRIP, '').trim(); // keep words spoken in the same breath
+        doWakeUp();
+        if (wakeFinal) { // one-breath command: answer it after his pause
+          clearTimeout(wakeTimer);
+          wakeTimer = setTimeout(submitWakeCmd, EAR_SILENCE_MS);
+        }
+      }
     } else {
       if (finals.trim()) wakeFinal += finals + ' ';
       clearTimeout(wakeTimer);
-      wakeTimer = setTimeout(() => {
-        const cmd = wakeFinal.replace(WAKE_STRIP, '').trim();
-        wakeFinal = '';
-        if (awake && cmd) { handleCommand(cmd); goDormant(); } // one command, then stop directly
-      }, EAR_SILENCE_MS);
+      wakeTimer = setTimeout(submitWakeCmd, EAR_SILENCE_MS);
     }
   };
-  rec.onend = () => { if (wakeMode) setTimeout(wakeLoop, 400); }; // auto-restart: always listening
+  rec.onend = () => {
+    wakeListening = false; wakeRec = null;
+    if (wakeHold || !wakeDesired) return;
+    setTimeout(wakeLoop, 400); // auto-restart: the ear never sleeps
+  };
   rec.onerror = (e) => {
-    if (!wakeMode) return;
+    wakeListening = false; wakeRec = null;
+    if (!wakeDesired || wakeHold) return;
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-      stopWake();
-      speak('Microphone access was denied, sir. Wake word disarmed.');
+      wakeBlockedAt = Date.now(); // back off; watchdog + his tap will retry
+      wakeChip.textContent = '\u25c9 MIC BLOCKED \u2014 TAP TO RETRY';
+      wakeChip.classList.remove('armed');
+      setStatus('MIC BLOCKED \u2014 ALLOW THE MICROPHONE, THEN TAP THE EAR');
+      speak('Microphone access was blocked, sir. Allow it for this page in Settings, then tap the ear icon.');
+      return;
     }
+    setTimeout(wakeLoop, 800);
   };
-  try { rec.start(); } catch (err) { setTimeout(wakeLoop, 800); }
+  try { rec.start(); } catch (err) { wakeListening = false; wakeRec = null; setTimeout(wakeLoop, 800); }
 }
+// watchdog: iOS sometimes kills recognition without firing onend \u2014 revive the ear
+setInterval(() => { if (wakeDesired && !wakeListening && !wakeHold && !recognizing) wakeLoop(); }, 8000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && wakeDesired && !wakeListening && !wakeHold && !recognizing) wakeLoop();
+});
 
 function doWakeUp() {
   awake = true;
@@ -1658,14 +1708,14 @@ function doWakeUp() {
   speak('Yes, sir?');
   prolongAwake();
 }
-function goDormant() { // stop directly: mic stays armed for "KAIROS", nothing else listens
+function goDormant() { // rest after one command — the ear itself never sleeps
   clearTimeout(awakeTimer);
   clearTimeout(wakeTimer);
   wakeFinal = '';
   awake = false;
   document.body.classList.remove('awake');
   document.body.classList.add('wake-dormant');
-  setStatus('DORMANT — SAY "KAIROS"');
+  setStatus(EAR_IDLE_TXT);
 }
 function prolongAwake() {
   clearTimeout(awakeTimer);
