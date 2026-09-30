@@ -1578,18 +1578,23 @@ const WAKE_WINDOW = 15000; // stays awake 15s after last command
 function wakeModeOn() { return wakeMode; }
 function isAwake() { return awake; }
 
-wakeChip.addEventListener('click', () => {
-  if (wakeMode) { stopWake(); return; }
+function armWake(silent) { // Alexa-style: arm the wake-word ear; returns false if unsupported
+  if (wakeMode) return true;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { speak('Wake word needs Chrome on Android, sir.'); return; }
+  if (!SR) { if (!silent) speak('Wake word needs a browser with speech recognition, sir.'); return false; }
   wakeMode = true;
-  wakeChip.textContent = '◉ WAKE WORD : ARMED';
+  wakeChip.textContent = '\u25c9 WAKE WORD : ARMED';
   wakeChip.classList.add('armed');
   document.body.classList.add('wake-dormant');
-  setStatus('DORMANT — SAY "KAIROS"');
-  addLog('jarvis', 'Wake-word protocol armed. Say "KAIROS" and I shall awaken.');
+  setStatus('DORMANT \u2014 SAY "KAIROS"');
+  if (!silent) addLog('jarvis', 'Wake-word protocol armed. Say "KAIROS" and I shall awaken.');
   try { speechSynthesis.cancel(); } catch (e) {}
   wakeLoop();
+  return true;
+}
+wakeChip.addEventListener('click', () => { // manual mute / unmute toggle stays
+  if (wakeMode) { stopWake(); return; }
+  armWake(false);
 });
 
 function stopWake() {
@@ -2339,6 +2344,7 @@ window.addEventListener('load', () => {
     boot.removeEventListener('pointerdown', wake);
     boot.classList.add('done');
     ensureAudio(); // unlock WebAudio inside the tap gesture
+    armWake(true); // always listening from here — like Alexa, no manual arming needed
     if (getUplink()) speak(bootGreeting());
     else { showUplink(); speak('Secure uplink not configured, sir. Enter the backend details to bring me fully online.'); }
   };
