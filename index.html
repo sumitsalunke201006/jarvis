@@ -465,8 +465,8 @@ async function addCalendarEvent(title, whenText, preparsed) {
 }
 async function readCalendarDay(t) {
   let offset = 0;
-  if (/\btomorrow\b/.test(t)) offset = 1;
-  else if (/\bday after tomorrow\b/.test(t)) offset = 2;
+  if (/\bday after tomorrow\b/.test(t)) offset = 2;
+  else if (/\btomorrow\b/.test(t)) offset = 1;
   const s = new Date(); s.setHours(0, 0, 0, 0); s.setDate(s.getDate() + offset);
   const e = new Date(s); e.setDate(e.getDate() + 1);
   setStatus('READING CALENDAR');
@@ -770,7 +770,10 @@ function handleCommand(raw) {
   }
   /* Google Calendar — handled locally, no neural-core call needed.
      Runs before local reminders: "remind me … on google calendar" is a calendar event. */
-  if (/(what'?s|what is) on my calendar/.test(t) || /\bcalendar (today|tomorrow|day after tomorrow)\b/.test(t)) {
+  if (/(what'?s|what is) on my calendar/.test(t) || /\bcalendar (today|tomorrow|day after tomorrow)\b/.test(t) ||
+      /\bevents?\b.*\b(do i have|have i|are there)\b/.test(t) || /\b(do i have|have i got|am i free)\b.*\b(events?|anything|plans?)\b/.test(t) ||
+      /\bwhat'?s on (today|tomorrow)\b/.test(t) || /\banything on\b.*\b(today|tomorrow)\b/.test(t) ||
+      /\bam i free\b/.test(t)) {
     readCalendarDay(t); return;
   }
   if (/^(?:please\s+)?schedule\b/.test(t)) { calendarAddFromText(t); return; }
