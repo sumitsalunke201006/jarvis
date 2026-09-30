@@ -33,11 +33,6 @@
   #boot.done { opacity: 0; pointer-events: none; }
   #bootlines { font-size: .8rem; line-height: 2; min-height: 200px; width: 100%; max-width: 420px; }
   #bootlines .ok { color: #7dffb2; }
-  #bootTap { display: none; margin-top: 28px; font-family: 'Orbitron', sans-serif; font-size: .78rem;
-    letter-spacing: 4px; color: var(--amber); text-shadow: 0 0 12px var(--amber); cursor: pointer;
-    animation: blink 1.2s ease-in-out infinite; }
-  #bootTap.show { display: block; }
-  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
 
   /* ---------- CONTROL DOCK (minimal 2D, floats above the 3D scene) ---------- */
   #dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
@@ -208,7 +203,7 @@
 <div id="potentialPill">KAIROS // 100% POTENTIAL</div>
 
 <!-- BOOT SEQUENCE -->
-<div id="boot"><div id="bootlines"></div><div id="bootTap">▸ TAP TO WAKE KAIROS</div></div>
+<div id="boot"><div id="bootlines"></div></div>
 
 <!-- SECURE UPLINK SETUP -->
 <div id="uplink">
@@ -1572,6 +1567,9 @@ setTimeout(bgTick, 2500); setTimeout(bgTick, 4500);
    Web-maximum version: works while the page is open and the screen is on.
    True background wake (screen off / app closed) needs a native Android app. */
 let wakeMode = false, awake = false, awakeTimer = null;
+// forgiving ear: speech engines transcribe "KY-ross" many ways — accept the common ones
+const WAKE_RE = /kairos|kairo|kiros|kyros|cairos|kai rose|chiros|keiros|kairus|kyro|kaios/i;
+const WAKE_STRIP = new RegExp(WAKE_RE.source, 'gi');
 let wakeFinal = '', wakeTimer = null; // patient wake: accumulate speech, answer after silence
 const wakeChip = document.getElementById('wakechip');
 const WAKE_WINDOW = 15000; // stays awake 15s after last command
@@ -1619,12 +1617,12 @@ function wakeLoop() {
     }
     const heard = (finals + ' ' + interim).toLowerCase();
     if (!awake) {
-      if (heard.includes('kairos')) { wakeFinal = ''; doWakeUp(); }
+      if (WAKE_RE.test(heard)) { wakeFinal = ''; doWakeUp(); }
     } else {
       if (finals.trim()) wakeFinal += finals + ' ';
       clearTimeout(wakeTimer);
       wakeTimer = setTimeout(() => {
-        const cmd = wakeFinal.replace(/kairos/gi, '').trim();
+        const cmd = wakeFinal.replace(WAKE_STRIP, '').trim();
         wakeFinal = '';
         if (awake && cmd) { handleCommand(cmd); goDormant(); } // one command, then stop directly
       }, EAR_SILENCE_MS);
@@ -1662,7 +1660,7 @@ function goDormant() { // stop directly: mic stays armed for "KAIROS", nothing e
 function prolongAwake() {
   clearTimeout(awakeTimer);
   awakeTimer = setTimeout(() => {
-    const cmd = wakeFinal.replace(/kairos/gi, '').trim();
+    const cmd = wakeFinal.replace(WAKE_STRIP, '').trim();
     goDormant();
     if (cmd) handleCommand(cmd); // answer what he managed to say before dozing off
   }, WAKE_WINDOW);
@@ -2330,25 +2328,27 @@ window.addEventListener('load', () => {
   matchMedia('(min-width: 1100px)').addEventListener('change', layoutHudRails);
   const box = document.getElementById('bootlines');
   const boot = document.getElementById('boot');
-  const tap = document.getElementById('bootTap');
   let i = 0;
   const tick = () => {
     if (i < bootLines.length) {
       const d = document.createElement('div'); d.innerHTML = bootLines[i++]; box.appendChild(d);
       setTimeout(tick, 420);
     } else {
-      tap.classList.add('show'); // gate: voice unlocks on this tap, on every platform
+      setTimeout(autoWake, 700); // no tap gate — his voice channel opens by itself
     }
   };
-  const wake = () => {
-    boot.removeEventListener('pointerdown', wake);
+  const autoWake = () => {
     boot.classList.add('done');
-    ensureAudio(); // unlock WebAudio inside the tap gesture
-    armWake(true); // always listening from here — like Alexa, no manual arming needed
-    if (getUplink()) speak(bootGreeting());
+    ensureAudio();
+    armWake(true); // always listening from here — like Alexa, no manual arming, no button
+    if (getUplink()) { addLog('jarvis', bootGreeting()); speak(bootGreeting()); }
     else { showUplink(); speak('Secure uplink not configured, sir. Enter the backend details to bring me fully online.'); }
   };
-  boot.addEventListener('pointerdown', wake);
+  // iOS rule: sound OUTPUT unlocks on his first touch anywhere; the mic needs no gesture.
+  window.addEventListener('pointerdown', function unlockAudio() {
+    ensureAudio();
+    try { if (actx && actx.state === 'suspended') actx.resume(); } catch (e) {}
+  }, { once: true });
   tick();
 });
 </script>
