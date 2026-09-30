@@ -190,18 +190,6 @@
     width: 28px; height: 28px; cursor: pointer; }
   #todaySheet .rail-title { margin-top: 12px; }
   #todaySheet .rail-title:first-of-type { margin-top: 0; }
-
-  /* ---------- SYSTEM TAG (left rail) ---------- */
-  #sysTag { position: fixed; left: 22px; top: 50%; transform: translateY(-50%); z-index: 60;
-    pointer-events: none; display: flex; align-items: stretch; gap: 12px; }
-  #sysTag .sys-bar { width: 2px; background: linear-gradient(180deg, transparent, var(--cyan), transparent);
-    box-shadow: 0 0 12px var(--cyan); }
-  #sysTag .sys-text { display: flex; flex-direction: column; justify-content: center; }
-  #sysTag .sys-kairos { font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 2.4rem;
-    letter-spacing: 10px; color: #eaf7ff; text-shadow: 0 0 18px var(--cyan), 0 0 46px rgba(70,216,255,.5); white-space: nowrap; }
-  #sysTag .sys-sub { font-family: 'Orbitron', sans-serif; font-size: .85rem; letter-spacing: 10px;
-    color: var(--cyan); opacity: .85; margin-top: 10px; white-space: nowrap; }
-  @media (max-width: 700px) { #sysTag { display: none; } }
 </style>
 </head>
 <body>
@@ -210,7 +198,6 @@
 <div id="domainFlash"></div>
 <div id="domainFire"></div>
 <div id="potentialPill">KAIROS // 100% POTENTIAL</div>
-<div id="sysTag"><div class="sys-bar"></div><div class="sys-text"><div class="sys-kairos">KAIROS</div><div class="sys-sub">INTELLIGENCE</div></div></div>
 
 <!-- BOOT SEQUENCE -->
 <div id="boot"><div id="bootlines"></div></div>
