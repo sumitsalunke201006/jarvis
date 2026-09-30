@@ -698,7 +698,7 @@ function playDomainExpansion() {
   if (domainFX) return;
   if (!threeOK || reducedMotion) { // graceful: no 3D, still engage
     setArmour(true);
-    speak('Behold... Hollow Purple. Full potential unleashed, sir.');
+    speak('Behold... Infinity Void. Hundred percent potential, sir.');
     return;
   }
   document.body.classList.add('domain-active'); // UI clears away
@@ -761,7 +761,7 @@ function updateDomainFX(dt) {
       scene3.remove(fx.blue.grp, fx.red.grp);
       fx.purple.grp.visible = true;
       spawnDomainRing(0xf3e8ff, 0); spawnDomainRing(0xa855f7, 0.12); spawnDomainRing(0x6d28d9, 0.24);
-      speak('Behold... Hollow Purple. Full potential unleashed, sir.');
+      speak('Behold... Infinity Void. Hundred percent potential, sir.');
     }
     const pt = T - 1.5;
     flick(fx.purple, T);
