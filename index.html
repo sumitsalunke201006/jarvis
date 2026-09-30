@@ -171,12 +171,12 @@
       <button id="upTest">TEST UPLINK</button>
     </div>
     <div id="upTestResult" class="up-result"></div>
-    <div class="up-sub" style="margin-top:18px">GMAIL — READ ONLY</div>
+    <div class="up-sub" style="margin-top:18px">GOOGLE ACCOUNT</div>
     <div class="up-row" style="align-items:center">
       <span id="gmailStatus" class="up-result" style="flex:1">Not checked.</span>
-      <button id="gmailConnect">CONNECT GMAIL</button>
+      <button id="gmailConnect">CONNECT GOOGLE</button>
     </div>
-    <div class="up-note">JARVIS reads mail — never sends, never deletes.<br>Google may ask you to sign in again about once a week.</div>
+    <div class="up-note">Gmail: JARVIS reads mail — never sends, never deletes.<br>Calendar: reads your day, creates events on command.<br>Google may ask you to sign in again about once a week.</div>
     <div class="up-note">Stored only on this device.<br>The passphrase is never displayed back.<br>Long-press the reactor core to reopen this panel.</div>
   </div>
 </div>
@@ -314,6 +314,120 @@ document.getElementById('upSave').addEventListener('click', () => {
 });
 document.getElementById('upCancel').addEventListener('click', () => { hideUplink(); setStatus('STANDBY'); });
 document.getElementById('uplinkBtn').addEventListener('click', () => { showUplink(); });
+/* ---------- Google Calendar: natural date parser + voice commands ---------- */
+function isoLocal(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  const off = -d.getTimezoneOffset(), sign = off >= 0 ? '+' : '-';
+  const a = Math.abs(off);
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' +
+    p(d.getHours()) + ':' + p(d.getMinutes()) + ':00' + sign + p(Math.floor(a / 60)) + ':' + p(a % 60);
+}
+/* Parses "tomorrow at 5pm", "friday 6:30pm", "october 5 morning"…
+   Returns { start: Date, end: Date, title } or null. Unmatched words become the title. */
+function parseCalendarWhen(raw) {
+  let t = ' ' + String(raw || '').toLowerCase() + ' ';
+  const now = new Date();
+  const day = new Date(now); day.setHours(0, 0, 0, 0);
+  let matchedDay = false;
+  const eat = (re) => { const m = t.match(re); if (m) t = t.replace(re, ' '); return m; };
+  if (eat(/\bday after tomorrow\b/)) { day.setDate(day.getDate() + 2); matchedDay = true; }
+  else if (eat(/\btomorrow\b/)) { day.setDate(day.getDate() + 1); matchedDay = true; }
+  else if (eat(/\btoday\b/)) { matchedDay = true; }
+  else {
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    for (let i = 0; i < 7; i++) {
+      if (eat(new RegExp('\\b' + days[i] + '\\b'))) {
+        let diff = (i - day.getDay() + 7) % 7;
+        if (diff === 0) diff = 7;
+        day.setDate(day.getDate() + diff); matchedDay = true; break;
+      }
+    }
+  }
+  if (!matchedDay) {
+    const mon = { january: 0, february: 1, march: 2, april: 3, may: 4, june: 5, july: 6,
+      august: 7, september: 8, october: 9, november: 10, december: 11 };
+    const m = eat(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(st|nd|rd|th)?\b/) ||
+              eat(/\b(\d{1,2})(st|nd|rd|th)?\s+of\s+(january|february|march|april|may|june|july|august|september|october|november|december)\b/);
+    if (m) {
+      let mi = -1, dn = 0;
+      for (const g of m.slice(1)) {
+        if (g && mon[g] !== undefined) mi = mon[g];
+        else if (g && /^\d+$/.test(g)) dn = +g;
+      }
+      if (mi >= 0 && dn > 0 && dn <= 31) {
+        day.setMonth(mi, dn);
+        const sod = new Date(now); sod.setHours(0, 0, 0, 0);
+        if (day < sod) day.setFullYear(day.getFullYear() + 1);
+        matchedDay = true;
+      }
+    }
+  }
+  let h = 9, min = 0, matchedTime = false, tm;
+  if ((tm = eat(/\b(\d{1,2})(:(\d{2}))?\s*(am|pm)\b/))) {
+    h = (+tm[1] % 12) + (tm[4] === 'pm' ? 12 : 0); min = +(tm[3] || 0); matchedTime = true;
+  } else if ((tm = eat(/\b([01]?\d|2[0-3]):([0-5]\d)\b/))) {
+    h = +tm[1]; min = +tm[2]; matchedTime = true;
+  } else if (eat(/\bmorning\b/)) { h = 9; matchedTime = true; }
+  else if (eat(/\bafternoon\b/)) { h = 14; matchedTime = true; }
+  else if (eat(/\bevening\b/)) { h = 18; matchedTime = true; }
+  else if (eat(/\bnight\b/)) { h = 21; matchedTime = true; }
+  if (!matchedDay && !matchedTime) return null;
+  const start = new Date(day); start.setHours(h, min, 0, 0);
+  if (!matchedDay && start <= now) start.setDate(start.getDate() + 1);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const title = t.replace(/\s+/g, ' ').trim().replace(/^(at|on|for)\s+/, '').replace(/\s+(at|on|for)$/, '');
+  return { start, end, title };
+}
+function speakWhen(d) {
+  const now = new Date();
+  const sod = (x) => { const c = new Date(x); c.setHours(0, 0, 0, 0); return c; };
+  const diffDays = Math.round((sod(d) - sod(now)) / 86400000);
+  let h = d.getHours(), ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+  const time = h + (d.getMinutes() ? ':' + String(d.getMinutes()).padStart(2, '0') : '') + ' ' + ap;
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const mons = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  if (diffDays === 0) return 'today at ' + time;
+  if (diffDays === 1) return 'tomorrow at ' + time;
+  if (diffDays > 1 && diffDays < 7) return days[d.getDay()] + ' at ' + time;
+  return mons[d.getMonth()] + ' ' + d.getDate() + ' at ' + time;
+}
+async function addCalendarEvent(title, whenText) {
+  const parsed = parseCalendarWhen(whenText || '');
+  if (!parsed) { speak('When should I set it, sir? Try "add ' + title + ' to my calendar tomorrow at 5pm".'); return; }
+  const finalTitle = parsed.title || title;
+  if (!finalTitle) { speak('What should I call the event, sir?'); return; }
+  setStatus('ADDING TO CALENDAR');
+  const cfg = getUplink();
+  if (!cfg) { showUplink(); return; }
+  try {
+    const r = await fetch(cfg.url + '/api/calendar/events', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-jarvis-key': cfg.key },
+      body: JSON.stringify({ summary: finalTitle, start: isoLocal(parsed.start), end: isoLocal(parsed.end), timeZone: 'Asia/Kolkata' }),
+    });
+    const j = await r.json();
+    if (j && j.ok) speak('Done, sir — "' + finalTitle + '" is on your calendar for ' + speakWhen(parsed.start) + '.');
+    else speak(j.reply || 'I could not reach your calendar, sir.');
+  } catch (e) { speak('My link to Google faltered, sir — give me a moment.'); }
+}
+async function readCalendarDay(t) {
+  let offset = 0;
+  if (/\btomorrow\b/.test(t)) offset = 1;
+  else if (/\bday after tomorrow\b/.test(t)) offset = 2;
+  const s = new Date(); s.setHours(0, 0, 0, 0); s.setDate(s.getDate() + offset);
+  const e = new Date(s); e.setDate(e.getDate() + 1);
+  setStatus('READING CALENDAR');
+  const j = await gmailApi('/api/calendar/events', { timeMin: isoLocal(s), timeMax: isoLocal(e), max: '10' });
+  if (!j) return;
+  if (!j.ok) { speak(j.reply || 'I could not reach your calendar, sir.'); return; }
+  const evs = j.events || [];
+  const label = offset === 0 ? 'today' : offset === 1 ? 'tomorrow' : 'the day after tomorrow';
+  if (!evs.length) { speak('Nothing on your calendar ' + label + ', sir. A clear field.'); return; }
+  const fmt = (iso) => { const d = new Date(iso); let h = d.getHours(), ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+    return h + (d.getMinutes() ? ':' + String(d.getMinutes()).padStart(2, '0') : '') + ' ' + ap; };
+  speak(evs.length + ' event' + (evs.length === 1 ? '' : 's') + ' ' + label + ', sir: ' +
+    evs.slice(0, 5).map((x) => x.summary + ' at ' + fmt(x.start)).join('; ') + '.');
+}
+
 /* ---------- Gmail (read-only): status, connect, voice commands ---------- */
 let lastMailIds = [];
 async function gmailApi(path, params) {
@@ -488,6 +602,14 @@ function handleCommand(raw) {
     if (armourMode) { setArmour(false); speak('Armour disengaged, sir.'); }
     else speak('Armour is already offline, sir.');
     return;
+  }
+  /* Google Calendar — handled locally, no neural-core call needed */
+  const calAdd = t.match(/^add (.+?) to (my )?calendar(.*)$/);
+  if (calAdd) { addCalendarEvent(calAdd[1].trim().slice(0, 120), (calAdd[3] || '').trim()); return; }
+  const calSched = t.match(/^schedule (.+)$/);
+  if (calSched) { addCalendarEvent('', calSched[1].trim().slice(0, 160)); return; }
+  if (/(what'?s|what is) on my calendar/.test(t) || /\bcalendar (today|tomorrow|day after tomorrow)\b/.test(t)) {
+    readCalendarDay(t); return;
   }
   /* Gmail (read-only) — handled locally, no neural-core call needed */
   const mailFrom = t.match(/(?:mail|email|emails)\s+from\s+(.+)$/);
