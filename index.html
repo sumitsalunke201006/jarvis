@@ -597,6 +597,55 @@ function setArmour(on) {
 }
 
 /* ---------- COMMANDS: instant device actions stay local, everything else -> neural core ---------- */
+/* ---------- Open apps (Siri-style, via URL schemes) ----------
+   A web page cannot launch apps with system privileges, so this fires each app's
+   registered URL scheme. Auto-open is best-effort (hidden iframe = silent if the
+   app is missing); a tappable pill is always shown as the guaranteed path. */
+const APP_SCHEMES = {
+  'vlc': 'vlc://', 'vlc player': 'vlc://', 'vlc media player': 'vlc://',
+  'youtube': 'youtube://', 'you tube': 'youtube://',
+  'whatsapp': 'whatsapp://',
+  'instagram': 'instagram://', 'insta': 'instagram://',
+  'spotify': 'spotify://',
+  'telegram': 'tg://',
+  'twitter': 'twitter://', 'x': 'twitter://',
+};
+let appPill = null, appPillTo = null;
+function hideAppPill() {
+  if (appPillTo) { clearTimeout(appPillTo); appPillTo = null; }
+  if (appPill) { appPill.remove(); appPill = null; }
+}
+function showAppPill(label, scheme) {
+  hideAppPill();
+  const a = document.createElement('a');
+  a.href = scheme;
+  a.textContent = '▶ OPEN ' + label.toUpperCase();
+  a.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:9999;' +
+    'padding:14px 28px;border-radius:999px;background:rgba(0,229,255,.10);border:1px solid #00e5ff;' +
+    'color:#cfeeff;font:600 15px "Share Tech Mono",monospace;letter-spacing:2px;text-decoration:none;' +
+    'box-shadow:0 0 26px rgba(0,229,255,.35);backdrop-filter:blur(6px);';
+  document.body.appendChild(a);
+  appPill = a;
+  const done = () => hideAppPill();
+  document.addEventListener('visibilitychange', function v() {
+    if (!document.hidden) { document.removeEventListener('visibilitychange', v); done(); }
+  });
+  appPillTo = setTimeout(done, 15000);
+}
+function launchApp(name) {
+  const scheme = APP_SCHEMES[name];
+  if (!scheme) return;
+  const label = name.replace(/\b\w/g, c => c.toUpperCase());
+  speak('Opening ' + label + ', sir.');
+  showAppPill(label, scheme);
+  try {
+    const f = document.createElement('iframe');
+    f.style.display = 'none';
+    document.body.appendChild(f);
+    f.src = scheme; // silent no-op if the app isn't installed
+    setTimeout(() => f.remove(), 2500);
+  } catch (e) { /* pill remains the fallback */ }
+}
 function handleCommand(raw) {
   const t = raw.toLowerCase().trim();
   addLog('you', raw);
@@ -619,6 +668,10 @@ function handleCommand(raw) {
     readCalendarDay(t); return;
   }
   if (/^(?:please\s+)?schedule\b/.test(t)) { calendarAddFromText(t); return; }
+  /* Open apps like Siri — via each app's URL scheme (page can't launch apps directly).
+     Only known app names are intercepted; everything else ("open my notebook") falls through. */
+  const mOpen = t.match(/^(?:please\s+)?(?:open|launch|start)\s+(.+)$/);
+  if (mOpen && APP_SCHEMES[mOpen[1].trim()]) { launchApp(mOpen[1].trim()); return; }
   if (/\bcalendar\b/.test(t) && /^(?:please\s+)?(?:set|add|create|put|schedule)\b/.test(t)) {
     calendarAddFromText(t); return;
   }
