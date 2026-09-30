@@ -1587,13 +1587,15 @@ let wakeDesired = false;   // the ear SHOULD be on (set at boot; survives failur
 let wakeListening = false; // a live recognition instance is actually running
 let wakeHold = false;      // paused while Kairos speaks or the mic button is in use
 let wakeRec = null, wakeBlockedAt = 0;
-// forgiving ear: speech engines transcribe "KY-ross" many ways — accept the common ones
-const WAKE_RE = /kairos|kairo|kiros|kyros|cairos|kai rose|chiros|keiros|kairus|kyro|kaios/i;
+// forgiving ear: speech engines transcribe "KY-ross" many ways — accept the common ones.
+// Bare "kai" also wakes him — word-boundary matched so only the standalone word
+// triggers, never "kai" buried inside a longer word. "kairo"/"kairos" were already covered.
+const WAKE_RE = /kairos|kairo|kiros|kyros|cairos|kai rose|chiros|keiros|kairus|kyro|kaios|\bkai\b/i;
 const WAKE_STRIP = new RegExp(WAKE_RE.source, 'gi');
 let wakeFinal = '', wakeTimer = null; // patient wake: accumulate speech, answer after silence
 const wakeChip = document.getElementById('wakechip');
 const WAKE_WINDOW = 15000; // answers what he managed to say if he trails off
-const EAR_IDLE_TXT = 'SAY "KAIROS" \u2014 ALWAYS LISTENING';
+const EAR_IDLE_TXT = 'SAY "KAI" \u2014 ALWAYS LISTENING';
 function wakeModeOn() { return wakeMode; }
 function isAwake() { return awake; }
 
@@ -1607,7 +1609,7 @@ function armWake(silent) { // arm the always-on ear; returns false if unsupporte
   wakeChip.classList.add('armed');
   document.body.classList.add('wake-dormant');
   setStatus(EAR_IDLE_TXT);
-  if (!silent) addLog('jarvis', 'Always-listening ear armed. Just say "KAIROS" \u2014 no buttons, ever.');
+  if (!silent) addLog('jarvis', 'Always-listening ear armed. Just say "Kai" \u2014 no buttons, ever.');
   try { speechSynthesis.cancel(); } catch (e) {}
   wakeLoop();
   return true;
