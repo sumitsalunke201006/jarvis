@@ -673,30 +673,51 @@ function radialSprite() {
   return new THREE.CanvasTexture(c);
 }
 function makeFireOrb(colorHex) {
+  // a cursed-energy sphere: roiling surface, white-hot heart, crackling lightning,
+  // a containment ring barely holding it together — majestic, not a marble.
   const grp = new THREE.Group();
   const core = new THREE.Mesh(new THREE.SphereGeometry(0.55, 24, 18),
     new THREE.MeshBasicMaterial({ color: colorHex }));
+  const coreBase = core.geometry.attributes.position.array.slice();
   grp.add(core);
+  const inner = new THREE.Mesh(new THREE.SphereGeometry(0.3, 18, 14),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex).lerp(new THREE.Color(0xffffff), 0.78) }));
+  grp.add(inner);
   if (!domainGlowTex) domainGlowTex = radialSprite();
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: domainGlowTex, color: colorHex,
     transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
-  glow.scale.set(4.4, 4.4, 1);
+  glow.scale.set(5.2, 5.2, 1);
   grp.add(glow);
-  const N = 46, pos = new Float32Array(N * 3), base = [];
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.05, 8, 64),
+    new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.75,
+      blending: THREE.AdditiveBlending, depthWrite: false }));
+  grp.add(ring);
+  const arcs = [];
+  const arcCol = new THREE.Color(colorHex).lerp(new THREE.Color(0xffffff), 0.55);
+  for (let a = 0; a < 7; a++) {
+    const ag = new THREE.BufferGeometry();
+    ag.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9*3), 3));
+    const line = new THREE.Line(ag, new THREE.LineBasicMaterial({ color: arcCol,
+      transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
+    line.frustumCulled = false;
+    grp.add(line); arcs.push(line);
+  }
+  const N = 90, pos = new Float32Array(N * 3), base = [];
   for (let i = 0; i < N; i++) {
-    const r = 0.7 + Math.random() * 1.6, th = Math.random() * Math.PI * 2,
+    const r = 0.75 + Math.random() * 1.9, th = Math.random() * Math.PI * 2,
       ph = Math.acos(2 * Math.random() - 1);
     base.push([r * Math.sin(ph) * Math.cos(th), r * Math.sin(ph) * Math.sin(th), r * Math.cos(ph)]);
   }
   const pg = new THREE.BufferGeometry();
   pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const pts = new THREE.Points(pg, new THREE.PointsMaterial({ color: colorHex, size: 0.22,
+  const pts = new THREE.Points(pg, new THREE.PointsMaterial({ color: colorHex, size: 0.2,
     map: domainGlowTex, transparent: true, opacity: 0.95,
     blending: THREE.AdditiveBlending, depthWrite: false }));
+  pts.frustumCulled = false;
   grp.add(pts);
   const light = new THREE.PointLight(colorHex, 30, 26);
   grp.add(light);
-  return { grp, core, glow, pts, base, N, light };
+  return { grp, core, coreBase, inner, glow, ring, arcs, arcTick: -1, pts, base, N, light };
 }
 /* ---------- DOMAIN EXPANSION: fire embers (additive sparks that rise like real fire) ---------- */
 const EMBER_N = 240;
@@ -758,49 +779,84 @@ function domainSound(kind) {
   const ac = dac(); if (!ac) return;
   try {
     const t = ac.currentTime;
-    if (kind === 'charge') { // rising whoosh as the orbs converge
-      const src = ac.createBufferSource(); src.buffer = noiseBuf(ac, 1.6);
-      const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
-      bp.frequency.setValueAtTime(280, t); bp.frequency.exponentialRampToValueAtTime(4200, t + 1.45);
+    if (kind === 'charge') { // dark gathering storm — the domain inhales before it strikes
+      const src = ac.createBufferSource(); src.buffer = noiseBuf(ac, 2.1);
+      const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9;
+      bp.frequency.setValueAtTime(170, t); bp.frequency.exponentialRampToValueAtTime(2600, t + 1.85);
       const g = ac.createGain();
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 1.4);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.55);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.42, t + 1.8);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 2.0);
       src.connect(bp); bp.connect(g); g.connect(ac.destination);
-      src.start(t); src.stop(t + 1.6);
-      const riser = ac.createOscillator(); riser.type = 'sine';
-      riser.frequency.setValueAtTime(70, t); riser.frequency.exponentialRampToValueAtTime(330, t + 1.45);
-      const rg = ac.createGain(); rg.gain.setValueAtTime(0.0001, t);
-      rg.gain.exponentialRampToValueAtTime(0.12, t + 1.4); rg.gain.exponentialRampToValueAtTime(0.0001, t + 1.55);
-      riser.connect(rg); rg.connect(ac.destination); riser.start(t); riser.stop(t + 1.6);
-    } else if (kind === 'boom') { // collision: gritty explosion + sub drop
-      const src = ac.createBufferSource(); src.buffer = noiseBuf(ac, 1.0);
+      src.start(t); src.stop(t + 2.05);
+      // guttural growl rising underneath — FM saw through heavy distortion
+      const growl = ac.createOscillator(); growl.type = 'sawtooth';
+      growl.frequency.setValueAtTime(46, t); growl.frequency.exponentialRampToValueAtTime(92, t + 1.85);
+      const fm = ac.createOscillator(); fm.frequency.setValueAtTime(29, t);
+      fm.frequency.exponentialRampToValueAtTime(61, t + 1.85);
+      const fmg = ac.createGain(); fmg.gain.setValueAtTime(20, t);
+      fmg.gain.exponentialRampToValueAtTime(70, t + 1.85);
+      fm.connect(fmg); fmg.connect(growl.frequency);
+      const wg = ac.createWaveShaper();
+      const gc = new Float32Array(256);
+      for (let i = 0; i < 256; i++) { const x = i/128 - 1; gc[i] = Math.tanh(3.2*x); }
+      wg.curve = gc;
+      const glp = ac.createBiquadFilter(); glp.type = 'lowpass'; glp.frequency.value = 420;
+      const gg = ac.createGain(); gg.gain.setValueAtTime(0.0001, t);
+      gg.gain.exponentialRampToValueAtTime(0.34, t + 1.8); gg.gain.exponentialRampToValueAtTime(0.0001, t + 2.0);
+      growl.connect(wg); wg.connect(glp); glp.connect(gg); gg.connect(ac.destination);
+      growl.start(t); growl.stop(t + 2.05); fm.start(t); fm.stop(t + 2.05);
+      // deep sub pulse — a slow dread heartbeat
+      const sub = ac.createOscillator(); sub.type = 'sine'; sub.frequency.value = 38;
+      const sg = ac.createGain(); sg.gain.setValueAtTime(0.0001, t);
+      const trem = ac.createOscillator(); trem.frequency.value = 3.2;
+      const tg = ac.createGain(); tg.gain.value = 0.05;
+      trem.connect(tg); tg.connect(sg.gain);
+      sg.gain.exponentialRampToValueAtTime(0.14, t + 1.2);
+      sg.gain.exponentialRampToValueAtTime(0.0001, t + 2.0);
+      sub.connect(sg); sg.connect(ac.destination);
+      sub.start(t); sub.stop(t + 2.05); trem.start(t); trem.stop(t + 2.05);
+    } else if (kind === 'boom') { // cataclysm: snap crack + crushing blast + abyssal drop
+      const crack = ac.createBufferSource(); crack.buffer = noiseBuf(ac, 0.12);
+      const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+      const cg2 = ac.createGain();
+      cg2.gain.setValueAtTime(0.55, t); cg2.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+      crack.connect(hp); hp.connect(cg2); cg2.connect(ac.destination);
+      crack.start(t); crack.stop(t + 0.12);
+      const src = ac.createBufferSource(); src.buffer = noiseBuf(ac, 1.5);
       const lp = ac.createBiquadFilter(); lp.type = 'lowpass';
-      lp.frequency.setValueAtTime(900, t); lp.frequency.exponentialRampToValueAtTime(90, t + 0.8);
+      lp.frequency.setValueAtTime(750, t); lp.frequency.exponentialRampToValueAtTime(55, t + 1.25);
       const ws = ac.createWaveShaper();
       const curve = new Float32Array(256);
-      for (let i = 0; i < 256; i++) { const x = i/128 - 1; curve[i] = Math.tanh(2.5*x); }
+      for (let i = 0; i < 256; i++) { const x = i/128 - 1; curve[i] = Math.tanh(3.5*x); }
       ws.curve = curve;
       const g = ac.createGain();
-      g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+      g.gain.setValueAtTime(0.95, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.45);
       src.connect(lp); lp.connect(ws); ws.connect(g); g.connect(ac.destination);
-      src.start(t); src.stop(t + 1.0);
+      src.start(t); src.stop(t + 1.5);
       const drop = ac.createOscillator(); drop.type = 'sine';
-      drop.frequency.setValueAtTime(130, t); drop.frequency.exponentialRampToValueAtTime(27, t + 0.85);
-      const dg = ac.createGain(); dg.gain.setValueAtTime(0.8, t);
-      dg.gain.exponentialRampToValueAtTime(0.0001, t + 1.0);
-      drop.connect(dg); dg.connect(ac.destination); drop.start(t); drop.stop(t + 1.05);
-    } else if (kind === 'shimmer') { // eerie hollow-purple sustain
-      [880, 1318, 1760].forEach((f, i) => {
-        const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = f * (1 + (Math.random()-.5)*0.01);
+      drop.frequency.setValueAtTime(105, t); drop.frequency.exponentialRampToValueAtTime(24, t + 1.2);
+      const dg = ac.createGain(); dg.gain.setValueAtTime(0.9, t);
+      dg.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+      drop.connect(dg); dg.connect(ac.destination); drop.start(t); drop.stop(t + 1.45);
+    } else if (kind === 'shimmer') { // the void hums — dark detuned drone, no chimes
+      [110, 116.54, 164.81].forEach((f) => {
+        const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+        const lp2 = ac.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 640;
         const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.07, t + 0.35);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
-        const lfo = ac.createOscillator(); lfo.frequency.value = 5 + i*1.7;
-        const lg = ac.createGain(); lg.gain.value = 0.035;
-        lfo.connect(lg); lg.connect(g.gain);
-        o.connect(g); g.connect(ac.destination);
-        o.start(t); o.stop(t + 2.3); lfo.start(t); lfo.stop(t + 2.3);
+        g.gain.exponentialRampToValueAtTime(0.06, t + 0.5);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 2.7);
+        o.connect(lp2); lp2.connect(g); g.connect(ac.destination);
+        o.start(t); o.stop(t + 2.8);
       });
+      const w = ac.createOscillator(); w.type = 'sine'; w.frequency.value = 1244;
+      const wlfo = ac.createOscillator(); wlfo.frequency.value = 0.7;
+      const wlg = ac.createGain(); wlg.gain.value = 180;
+      wlfo.connect(wlg); wlg.connect(w.frequency);
+      const wg2 = ac.createGain(); wg2.gain.setValueAtTime(0.0001, t);
+      wg2.gain.exponentialRampToValueAtTime(0.028, t + 0.8);
+      wg2.gain.exponentialRampToValueAtTime(0.0001, t + 2.7);
+      w.connect(wg2); wg2.connect(ac.destination);
+      w.start(t); w.stop(t + 2.8); wlfo.start(t); wlfo.stop(t + 2.8);
     } else if (kind === 'rumble') { // deep bed while the flood holds
       domainRumbleStop();
       const src = ac.createBufferSource(); src.buffer = noiseBuf(ac, 2.5); src.loop = true;
@@ -867,21 +923,50 @@ function updateDomainFX(dt) {
   emberUpdate(fx, dt);
   const T = fx.t;
   const flick = (o, t) => {
+    // violent particle churn with radial surging
     const p = o.pts.geometry.attributes.position.array;
     for (let i = 0; i < o.N; i++) {
       const b = o.base[i];
-      p[i*3]   = b[0] + Math.sin(t*9 + i*1.7) * 0.16;
-      p[i*3+1] = b[1] + Math.cos(t*11 + i*2.3) * 0.16;
-      p[i*3+2] = b[2] + Math.sin(t*7 + i*0.9) * 0.16;
+      const surge = 1 + 0.2 * Math.sin(t*13 + i*0.7);
+      p[i*3]   = b[0]*surge + Math.sin(t*17 + i*1.7) * 0.34;
+      p[i*3+1] = b[1]*surge + Math.cos(t*21 + i*2.3) * 0.34;
+      p[i*3+2] = b[2]*surge + Math.sin(t*15 + i*0.9) * 0.34;
     }
     o.pts.geometry.attributes.position.needsUpdate = true;
-    o.core.scale.setScalar(1 + Math.sin(t*23) * 0.12);
-    o.glow.material.opacity = 0.75 + Math.sin(t*17) * 0.15;
-    o.light.intensity = 30 + Math.sin(t*31) * 8 + Math.sin(t*57 + 1.3) * 5;
+    // roiling surface — churning cursed energy, never a smooth ball
+    const cp = o.core.geometry.attributes.position.array, cb = o.coreBase;
+    for (let i = 0; i < cp.length; i += 3) {
+      const nx = cb[i], ny = cb[i+1], nz = cb[i+2];
+      const n = Math.sin(nx*6 + t*11) * Math.sin(ny*6 - t*9) * Math.sin(nz*6 + t*13);
+      const k = 1 + 0.17 * n;
+      cp[i] = nx*k; cp[i+1] = ny*k; cp[i+2] = nz*k;
+    }
+    o.core.geometry.attributes.position.needsUpdate = true;
+    o.core.scale.setScalar(1 + Math.sin(t*23) * 0.1);
+    o.inner.scale.setScalar(1 - Math.sin(t*23) * 0.08);
+    o.glow.material.opacity = 0.7 + Math.sin(t*19) * 0.2;
+    o.light.intensity = 30 + Math.sin(t*31) * 9 + Math.sin(t*57 + 1.3) * 6;
+    o.ring.rotation.x = t*3.4; o.ring.rotation.y = t*2.6;
+    // crackling lightning, regenerated in steps for a strobing arc effect
+    const tick = Math.floor(t*15);
+    if (tick !== o.arcTick) {
+      o.arcTick = tick;
+      for (const a of o.arcs) {
+        const ap = a.geometry.attributes.position.array;
+        let vx = (Math.random()-.5)*1.6, vy = (Math.random()-.5)*1.6, vz = (Math.random()-.5)*1.6;
+        const vl = Math.hypot(vx, vy, vz) || 1; vx = vx/vl*0.8; vy = vy/vl*0.8; vz = vz/vl*0.8;
+        for (let j = 0; j < 9; j++) {
+          ap[j*3] = vx; ap[j*3+1] = vy; ap[j*3+2] = vz;
+          vx += (Math.random()-.5)*0.9; vy += (Math.random()-.5)*0.9; vz += (Math.random()-.5)*0.9;
+        }
+        a.geometry.attributes.position.needsUpdate = true;
+        a.material.opacity = 0.5 + Math.random()*0.5;
+      }
+    }
   };
-  if (T < 1.5) {
+  if (T < 1.9) {
     // converge: blue from right, red from left, accelerating inward
-    const e = Math.pow(Math.min(1, T / 1.5), 1.7);
+    const e = Math.pow(Math.min(1, T / 1.9), 2.3);
     fx.blue.grp.position.x = 8 * (1 - e);
     fx.red.grp.position.x = -8 * (1 - e);
     fx.blue.grp.position.y = 0.6 + Math.sin(T*6) * 0.15;
@@ -891,12 +976,12 @@ function updateDomainFX(dt) {
       emberSpawn(fx, fx.blue.grp.position.x, fx.blue.grp.position.y, 5, 0.45, 0.65, 1, 0.7, 1.2);
       emberSpawn(fx, fx.red.grp.position.x, fx.red.grp.position.y, 5, 1, 0.42, 0.12, 0.7, 1.2);
     }
-    fx.fireV = Math.min(0.85, T / 1.5 * 0.85);
+    fx.fireV = Math.min(0.85, T / 1.9 * 0.85);
   } else {
     if (!fx.engaged) {
       fx.engaged = true;
       fx.flashV = 1; // collision flash
-      shake = 1.6;
+      shake = 2.2;
       scene3.remove(fx.blue.grp, fx.red.grp);
       fx.purple.grp.visible = true;
       spawnDomainRing(0xf3e8ff, 0); spawnDomainRing(0xa855f7, 0.12); spawnDomainRing(0x6d28d9, 0.24);
@@ -906,13 +991,13 @@ function updateDomainFX(dt) {
       for (let i = 0; i < 130; i++) emberSpawn(fx, 0, 0.6, 5, 1, 0.55 + Math.random()*0.3, 0.15, 1.2, 2.2);
       for (let i = 0; i < 40; i++) emberSpawn(fx, 0, 0.6, 5, 1, 0.95, 0.85, 0.8, 3.2);
     }
-    const pt = T - 1.5;
+    const pt = T - 1.9;
     flick(fx.purple, T);
     if (pt < 1.7) for (let i = 0; i < 2; i++)
       emberSpawn(fx, (Math.random()-.5)*2, 0.6 + (Math.random()-.5)*2, 5, 0.75, 0.4, 1, 1.6, 1.0);
     const pop = Math.min(1, pt / 0.45);
     fx.purple.grp.scale.setScalar(Math.max(0.01,
-      (0.01 + 1.65 * (1 - Math.pow(1 - pop, 3))) * (1 + Math.sin(T*10) * 0.05)));
+      (0.01 + 2.0 * (1 - Math.pow(1 - pop, 3))) * (1 + Math.sin(T*10) * 0.05)));
     for (const r of fx.rings) {
       r.t += dt;
       if (r.t < 0) continue;
@@ -927,7 +1012,7 @@ function updateDomainFX(dt) {
     fx.fireV = Math.max(0, 1 - pt / 2.2);
     if (pt >= 1.7) { // dissolve into embers as the flood recedes
       const d = Math.min(1, (pt - 1.7) / 0.6);
-      fx.purple.grp.scale.setScalar(Math.max(0.01, 1.7 * (1 - d)));
+      fx.purple.grp.scale.setScalar(Math.max(0.01, 2.0 * (1 - d)));
       fx.purple.pts.material.opacity = 0.95 * (1 - d);
       fx.purple.glow.material.opacity = 0.9 * (1 - d);
     }
