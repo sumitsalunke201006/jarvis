@@ -367,12 +367,17 @@ function speak(text, opts) {
     u.rate = (opts && opts.rate) || 0.95; u.pitch = (opts && opts.pitch) || 0.75; u.lang = 'en-US'; // deeper, calmer delivery
     const v = pickVoice(); if (v) u.voice = v;
     document.body.classList.add('talking'); setStatus('SPEAKING');
+    let speechFailsafe = null;
     const endSpeech = () => {
+      if (speechFailsafe) { clearTimeout(speechFailsafe); speechFailsafe = null; }
       document.body.classList.remove('talking');
       if (wakeDesired) setStatus(awake ? 'AWAKE — SPEAK NOW' : (wakeListening ? EAR_IDLE_TXT : 'EAR STARTING…'));
       else setStatus('STANDBY');
     };
     u.onend = u.onerror = endSpeech;
+    // iOS sometimes never fires onend — a stuck 'talking' would deafen the
+    // wake ear forever, so force the sign down after the words should be done.
+    speechFailsafe = setTimeout(endSpeech, Math.min(45000, 6000 + text.length * 150));
     // iOS Safari goes silent if cancel() and speak() run back-to-back while idle.
     if (speechSynthesis.speaking) {
       speechSynthesis.cancel();
@@ -1652,7 +1657,7 @@ let wakeRec = null, wakeBlockedAt = 0;
 // forgiving ear: speech engines transcribe "KY-ross" many ways — accept the common ones.
 // Bare "kai" also wakes him — word-boundary matched so only the standalone word
 // triggers, never "kai" buried inside a longer word. "kairo"/"kairos" were already covered.
-const WAKE_RE = /kairos|kairo|kiros|kyros|cairos|kai rose|chiros|keiros|kairus|kyro|kaios|\bkai\b/i;
+const WAKE_RE = /kairos|kairo|kiros|kyros|cairos|kai rose|chiros|keiros|kairus|kyro|kaios|kairosh|kyrose|kairoz|\bkai\b/i;
 const WAKE_STRIP = new RegExp(WAKE_RE.source, 'gi');
 let wakeFinal = '', wakeTimer = null; // patient wake: accumulate speech, answer after silence
 const wakeChip = document.getElementById('wakechip');
@@ -1722,6 +1727,9 @@ function wakeLoop() {
       if (e.results[i].isFinal) finals += tr + ' '; else interim += tr;
     }
     const heard = (finals + ' ' + interim).toLowerCase();
+    // prove the ear is alive: show exactly what it hears, so a missed
+    // "Kairos" shows its true transcription instead of silent failure
+    if (heard.trim()) setStatus('HEARD: "' + heard.trim().slice(-40) + '"');
     if (!awake) {
       if (WAKE_RE.test(heard)) {
         wakeFinal = heard.replace(WAKE_STRIP, '').trim(); // keep words spoken in the same breath
