@@ -691,6 +691,43 @@ function launchApp(name) {
   } catch (e) { /* pill remains the fallback */ }
 }
 
+/* ---------- INITIATIVE: he speaks first, unprompted ---------- */
+const announcedEvents = new Set();
+async function watchUpcomingEvents() {
+  if (document.hidden) return; // never interrupt another tab
+  const now = Date.now();
+  const j = await brainGet('/api/calendar/events', {
+    timeMin: isoLocal(new Date(now)), timeMax: isoLocal(new Date(now + 15 * 60000)), max: '5' });
+  if (!j || !j.ok) return;
+  for (const e of (j.events || [])) {
+    const start = new Date(e.start).getTime();
+    if (!start || announcedEvents.has(e.id)) continue;
+    const mins = Math.round((start - now) / 60000);
+    if (mins >= 0 && mins <= 15) {
+      announcedEvents.add(e.id);
+      speak('Sir, ' + (e.summary || 'an event') + ' begins in ' +
+        (mins <= 1 ? 'one minute' : mins + ' minutes') + '.');
+    }
+  }
+}
+async function maybeMorningBrief() {
+  const now = new Date();
+  if (now.getHours() >= 12) return; // mornings only
+  const today = now.toISOString().slice(0, 10);
+  if (localStorage.getItem('jarvis_brief_date') === today) return; // once a day
+  const j = await brainGet('/api/brief/morning');
+  if (j && j.ok && j.reply) {
+    localStorage.setItem('jarvis_brief_date', today);
+    speak(j.reply);
+  }
+}
+/* First tap unlocks audio; if he doesn't immediately give an order, brief him. */
+window.addEventListener('pointerdown', function unlockAudio() {
+  window.removeEventListener('pointerdown', unlockAudio);
+  setTimeout(() => { if (!window.__jarvisBusy) maybeMorningBrief(); }, 2500);
+}, { once: true });
+setInterval(watchUpcomingEvents, 60000);
+
 /* ---------- HUD SIDE PANELS (real data only — agenda + day brief) ---------- */
 function wirePanels() {
   document.getElementById('todayToggle').onclick = () => { document.getElementById('todaySheet').hidden = false; };
@@ -753,6 +790,7 @@ function layoutHudRails() {
   if (wide) $('todaySheet').hidden = true;
 }
 function handleCommand(raw) {
+  window.__jarvisBusy = true; // sir gave an order — stand down any pending initiative
   const t = raw.toLowerCase().trim();
   addLog('you', raw);
   const hitOn = matchesAny(t, ARMOUR_ON_PHRASES);
