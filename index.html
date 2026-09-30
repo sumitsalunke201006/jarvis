@@ -773,7 +773,8 @@ function handleCommand(raw) {
   if (/(what'?s|what is) on my calendar/.test(t) || /\bcalendar (today|tomorrow|day after tomorrow)\b/.test(t) ||
       /\bevents?\b.*\b(do i have|have i|are there)\b/.test(t) || /\b(do i have|have i got|am i free)\b.*\b(events?|anything|plans?)\b/.test(t) ||
       /\bwhat'?s on (today|tomorrow)\b/.test(t) || /\banything on\b.*\b(today|tomorrow)\b/.test(t) ||
-      /\bam i free\b/.test(t)) {
+      /\bam i free\b/.test(t) ||
+      /\bevents?\b.*\bi have\b/.test(t) || /\bi have\b.*\bevents?\b/.test(t)) {
     readCalendarDay(t); return;
   }
   if (/^(?:please\s+)?schedule\b/.test(t)) { calendarAddFromText(t); return; }
